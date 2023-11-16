@@ -4,6 +4,15 @@ pragma solidity >=0.8.0 <0.9.0;
 import "./AuctionCall.sol";
 import "fhevm/lib/TFHE.sol";
 
+// Owner.sol整合到AuctionCall中
+// TODO:通过枚举类型enum来管理auction_state和auction_retracted状态
+// TODO:把publickey4seller变成constructor的参数，FindWinner变成无输入。
+// TODO:创建一个add publickey的功能，onlyOwner_self，
+// TODO:加信息：有人报价了/有人改价了/有人撤回报价；
+//             卖家已成功锁价；
+//             卖家发起了撤回；
+//             结果出来了；
+//             中心修改了auction_limit；
 contract AuctionInstance {
     // 本合约用于构造拍卖订单的实例，卖方向中心（以./AuctionCall.sol为中心合约）传递订单相关参数后创建本合约。
     // 本合约创建后，买方只与本合约交互，进行报价、撤回报价等操作；报价时间截止后卖方进行报价锁定以及密文比价，最终获得拍卖结果。
@@ -52,6 +61,7 @@ contract AuctionInstance {
     }
 
     function owner() public view returns (address) {
+        // TODO: delete, make public owner
         // 获取拍卖订单的卖方地址。
         return _owner;
     }
@@ -132,7 +142,7 @@ contract AuctionInstance {
     function RetractMyAuction() public onlyOwner_center {
         // 卖方撤回本合约代表的拍卖，此方法只能由卖方通过中心合约的RetractAuction进行消息调用。
         auction_state = false;
-        auction_retracted = true;
+        auction_retracted = true; // TODO:enum
     }
 
     modifier normalfunctioned() {
@@ -145,6 +155,7 @@ contract AuctionInstance {
 
     mapping(address => Bidding) Biddinglist; // 定义Biddinglist用于报价环节中买方报价状态的更新。
     address[] BiddingAddress; // 定义BiddingAddress用于存储与拍卖订单交互的买方地址，与Biddinglist配合便于锁价后对所有待排序订单的预处理。
+    uint public BiddersNum;
 
     function RaiseBidding(
         // 买方调用的核心函数，用于发起报价。RaiseBidding接受序列化的密文bytes作为参数，包括单位报价和认领数量。
@@ -233,7 +244,7 @@ contract AuctionInstance {
     }
 
     function FindWinner(
-        bytes32 publicKey4owner
+        bytes32 publicKey4owner // TODO:再议
     ) public onlyOwner_self AuctionOff normalfunctioned returns (TopBidder4seller[] memory, address[] memory) {
         // 卖方锁价并执行密文比价得到拍卖结果的核心函数，要求只有卖方本人能够发起锁价，并且此时拍卖已经截止且未被撤回该函数执行的主要原理如下：
         // 1、由拍卖订单信息计算订单最大分拆数TrunctionNumber，初始化一个长度为TrunctionNumber的数组SortedFinalBiddings；
@@ -243,8 +254,10 @@ contract AuctionInstance {
         // 5、SortedFinalBiddings排序完成后，将其各项密文重加密为卖方可解密的密文，并将BiddingAddress的结果返回给卖方供其解密Bidder_index的参考。
         uint8 TrunctionNumber = uint8(orderdetail.Quantity / orderdetail.Minimalsplit); // 计算订单最大分拆数TrunctionNumber。
         BiddingAddress = List_Sorting(BiddingAddress); // 调用List_Sorting对BiddingAddress进行（依照Bidding_Time）的排序和无效订单的过滤。
-        if (TrunctionNumber > BiddingAddress.length) {///////!!!!!!!!!此处临时设置一个补救措施，后续可以再考虑更好的解决方案。
-            auction_state = true; 
+        BiddersNum = BiddingAddress.length;
+        if (BiddersNum == 0) {
+            // FIXME:!!!!!!!!!此处临时设置一个补救措施，后续可以再考虑更好的解决方案。
+            auction_state = false;
             orderdetail.Deadline = orderdetail.Deadline + 86400;
         }
         ExtractedFinal[] memory SortedFinalBiddings = new ExtractedFinal[](TrunctionNumber);
@@ -252,7 +265,7 @@ contract AuctionInstance {
             // 初始化SortedFinalBiddings，长度为TrunctionNumber，初始化的Linearized_Ciphertext为0的密文（最小值）。
             SortedFinalBiddings[i] = ExtractedFinal(TFHE.asEuint8(0), TFHE.asEuint32(0));
         }
-        for (uint j = 0; j < BiddingAddress.length; j++) {
+        for (uint j = 0; j < BiddersNum; j++) {
             // 依次取出BiddingAddress中的买方地址进行线性化密文的比较。
             Bidding memory currentbidding = Biddinglist[BiddingAddress[j]]; // 读取买方地址对应的拍卖订单信息，注意到买方地址一定对应Biddinglist中的有效报价。
             euint32 currentlinearizedbidding = CipherLinearization(currentbidding); // 通过当前读取的拍卖订单信息计算线性化密文。
@@ -289,12 +302,14 @@ contract AuctionInstance {
             // 7、最终得到的SortedFinalBiddings是按照单位报价高优先-认领/分拆数量大优先-报价时间早优先的顺序从低到高排列的。
         }
         TopBidder4seller[] memory SortedTopBidders4seller = new TopBidder4seller[](TrunctionNumber); // 初始化TopBidder4seller数组SortedTopBidders4seller，用于记录最后的密文结果。
-        for (uint l = 0; l < TrunctionNumber; l++) { // 将重加密的结果按顺序添加到SortedTopBidders4seller中。
+        for (uint l = 0; l < TrunctionNumber; l++) {
+            // 将重加密的结果按顺序添加到SortedTopBidders4seller中。
             SortedTopBidders4seller[l] = TopBidder4seller(
                 TFHE.reencrypt(SortedFinalBiddings[l].Bidder_Cindex, publicKey4owner),
                 TFHE.reencrypt(SortedFinalBiddings[l].Linearized_Ciphertext, publicKey4owner)
             );
         }
+        // TODO:增加Auction_Count的修改
         return (SortedTopBidders4seller, BiddingAddress);
         // 返回值第二项是为了便于卖方解密Bidder_index后通过BiddingAddress将对应买方的地址取出，这是因为构造Bidder_Cindex时是从BiddingAddress的序号来标记买方地址的。
         // BiddingAddress也可以从全局变量中读取。
