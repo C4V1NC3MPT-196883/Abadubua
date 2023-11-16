@@ -4,6 +4,7 @@ pragma solidity >=0.8.0 <0.9.0;
 import "./AuctionCall.sol";
 import "fhevm/lib/TFHE.sol";
 
+// TODO:调整顺序 把public放前面。
 // TODO:用cmux算出具体的成交人数，然后按照成交人数依次门限解密Cindex，然后用每个Cindex对应的pk和卖方进行重加密，注意：在Bidding_Address中添加pk一行。
 // TODO:Owner.sol整合到AuctionCall中
 // TODO:通过枚举类型enum来管理auction_state和auction_retracted状态：四种情况可接受报价、关闭报价窗口、拍卖撤回、流拍。
