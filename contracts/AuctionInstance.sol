@@ -4,13 +4,12 @@ pragma solidity >=0.8.0 <0.9.0;
 import "./AuctionCall.sol";
 import "fhevm/lib/TFHE.sol";
 
-// Owner.sol整合到AuctionCall中
-// TODO:通过枚举类型enum来管理auction_state和auction_retracted状态
+// TODO:用cmux算出具体的成交人数，然后按照成交人数依次门限解密Cindex，然后用每个Cindex对应的pk和卖方进行重加密，注意：在Bidding_Address中添加pk一行。
+// TODO:Owner.sol整合到AuctionCall中
+// TODO:通过枚举类型enum来管理auction_state和auction_retracted状态：四种情况可接受报价、关闭报价窗口、拍卖撤回、流拍。
 // TODO:把publickey4seller变成constructor的参数，FindWinner变成无输入。
-// TODO:创建一个add publickey的功能，onlyOwner_self，
-// TODO:加信息：有人报价了/有人改价了/有人撤回报价；
-//             卖家已成功锁价；
-//             卖家发起了撤回；
+// TODO:publickey和地址的对应检查，在bidding上面直接放publickey
+// TODO:加通知：卖家发起了撤回；
 //             结果出来了；
 //             中心修改了auction_limit；
 contract AuctionInstance {
@@ -309,7 +308,7 @@ contract AuctionInstance {
                 TFHE.reencrypt(SortedFinalBiddings[l].Linearized_Ciphertext, publicKey4owner)
             );
         }
-        // TODO:增加Auction_Count的修改
+        // TODO:增加Auction_Count和inProgress的修改
         return (SortedTopBidders4seller, BiddingAddress);
         // 返回值第二项是为了便于卖方解密Bidder_index后通过BiddingAddress将对应买方的地址取出，这是因为构造Bidder_Cindex时是从BiddingAddress的序号来标记买方地址的。
         // BiddingAddress也可以从全局变量中读取。

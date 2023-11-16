@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: UNLICENCED
 pragma solidity >=0.8.0 <0.9.0;
-
+// nihao
 import "./owner.sol";
 import "./AuctionInstance.sol";
 import "fhevm/lib/TFHE.sol";
@@ -14,11 +14,11 @@ contract AuctionCall is Ownable {
     uint public auction_limit;
 
     constructor(uint _auction_limit) {
-        auction_limit = _auction_limit; // todo: require>=1
+        auction_limit = _auction_limit; // TODO: require>=1
     }
 
     function SetAuctionLimit(uint _auction_limit) public onlyOwner {
-        auction_limit = _auction_limit; // todo: require>=1
+        auction_limit = _auction_limit; // TODO: require>=1
     }
 
     function RetractAuction(address auction_address) public OutsourseImmutability(msg.sender, tx.origin) {
