@@ -5,15 +5,18 @@ import "./owner.sol";
 import "./AuctionInstance.sol";
 import "fhevm/lib/TFHE.sol";
 
-contract AuctionCall is Ownable {
+contract AuctionCall {
     event NewOrderAlert(address creator, address auction_address, AuctionInstance.OrderDetail orderdetail);
 
+    address private owner;
     mapping(address => uint) Auction_Count; // 同一个卖方当前有多少个拍卖订单在进行
     mapping(address => address) Auction_Owner; // 指示拍卖合约地址对应的卖方地址
     uint public auction_limit;
 
     constructor(uint _auction_limit) {
         require(_auction_limit >= 1, "The limit of auctions in progress should be at least 1.");
+        require(msg.sender == tx.origin, "You are not an external account in Ethereum.");
+        owner = msg.sender;
         auction_limit = _auction_limit;
     }
 
@@ -69,6 +72,11 @@ contract AuctionCall is Ownable {
     modifier OutsourseImmutability() {
         // preserve for the future
         require(msg.sender == tx.origin, "You are not an external account in Ethereum.");
+        _;
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "You are not the owner of this contract.");
         _;
     }
 }
