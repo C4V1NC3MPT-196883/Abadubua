@@ -34,6 +34,7 @@ contract AuctionInstance {
         orderdetail = _orderdetail; // 将参数_orderdetail写入全局变量orderdetail，记录订单可视细节。
         address_auctioncall = msg.sender; // 将创建此合约的地址（即CreateNewAuction所在的实例合约）写入全局变量address_auctioncall，作为本合约的中心合约地址。
         _owner = tx.origin; // 将CreateNewAuction的调用者地址写入全局变量_owner，作为本合约的创建者，即拍卖订单的卖方。
+        require(AddressFromPublicKey(_publickey) == _owner, "The public key is not the address of the owner.");
         owner_publickey = _publickey; // 将CreateNewAuction的调用者公钥写入全局变量owner_publickey，记录拍卖订单的卖方公钥。
     }
 
