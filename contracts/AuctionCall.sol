@@ -8,7 +8,7 @@ contract AuctionCall {
     event NewOrderAlert(address creator, address auction_address, AuctionInstance.OrderDetail orderdetail);
 
     address private owner;
-    mapping(address => uint) Auction_Count; // 同一个卖方当前有多少个拍卖订单在进行
+    mapping(address => uint) public Auction_Count; // 同一个卖方当前有多少个拍卖订单在进行
     mapping(address => address) Auction_Owner; // 指示拍卖合约地址对应的卖方地址
     uint public auction_limit;
 
