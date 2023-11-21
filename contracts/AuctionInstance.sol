@@ -114,6 +114,8 @@ contract AuctionInstance {
         BiddersNum = BiddersInfoList.length;
         //SortedParsedBiddings = new ExtractedFinal_parsed[](TrunctionNumber);
         if (BiddersNum == 0) {
+            (bool hasbeen_terminated, ) = address_auctioncall.call(abi.encodeWithSignature("TerminateAuction()"));
+            require(hasbeen_terminated, "The call of retract has failed.");
             currentstate = auction_state.unsold;
             return;
         }
@@ -171,6 +173,8 @@ contract AuctionInstance {
             );
         }
         WinnersNum = TFHE.decrypt(winnersnumber());
+        (bool hasbeen_terminated, ) = address_auctioncall.call(abi.encodeWithSignature("TerminateAuction()"));
+        require(hasbeen_terminated, "The call of retract has failed.");
         currentstate = auction_state.finished;
     }
 
