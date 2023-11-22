@@ -44,6 +44,7 @@ contract AuctionInstance {
         //require(AddressFromPublicKey(_publickey) == _owner, "The public key is not the address of the owner.");
         owner_publickey = _publickey; // 将CreateNewAuction的调用者公钥写入全局变量owner_publickey，记录拍卖订单的卖方公钥。
         TrunctionNumber = uint8(orderdetail.Quantity / orderdetail.Minimalsplit);
+        currentstate = auction_state.on;
     }
 
     function RetractMyAuction() public onlyOwner_self {

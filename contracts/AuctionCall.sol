@@ -13,6 +13,8 @@ contract AuctionCall {
     mapping(address => address) Auction_Owner; // 指示拍卖合约地址对应的卖方地址
     uint public auction_limit;
 
+    //AuctionInstance public temporary_contract;
+
     constructor(uint _auction_limit) {
         require(
             _auction_limit >= 1,
@@ -65,6 +67,7 @@ contract AuctionCall {
             block.timestamp + _duration
         );
         AuctionInstance new_auction = new AuctionInstance(orderdetail, _publickey);
+        //temporary_contract = new_auction;
         address newinstance_Address = address(new_auction);
         Auction_Count[msg.sender]++;
         emit NewOrderAlert(msg.sender, newinstance_Address, orderdetail);
