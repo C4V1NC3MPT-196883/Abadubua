@@ -1,4 +1,6 @@
 import { expect } from "chai";
+import { error } from "console";
+import exp from "constants";
 import type { FhevmInstance } from "fhevmjs";
 import { ethers } from "hardhat";
 
@@ -33,22 +35,55 @@ describe("AuctionCall", function () {
     expect(await this.auction.auction_limit()).to.equal(2);
   });
 
-  it("should change the auction_limit to 4", async function () {
-    const tx = await this.auction.connect(this.signers.alice).SetAuctionLimit(4);
-    await tx.wait();
+  it("should change the auction_limit to 4, then to 3", async function () {
+    const tx1 = await this.auction.connect(this.signers.alice).SetAuctionLimit(4);
+    await tx1.wait();
     expect(await this.auction.auction_limit()).to.equal(4);
+    const tx2 = await this.auction.connect(this.signers.alice).SetAuctionLimit(3);
+    await tx2.wait();
+    expect(await this.auction.auction_limit()).to.equal(3);
   });
 
   it("test create new auction", async function () {
-    const byteorigin = new Uint8Array([
-      10, 251, 252, 160, 190, 33, 108, 31, 106, 188, 179, 254, 98, 161, 196, 27, 212, 37, 155, 184, 217, 111, 31, 39,
-      93, 123, 197, 249, 233, 158, 231, 101,
-    ]);
-    const hope = uint8ArrayToBytes32(byteorigin);
-    const tx_bob = await this.auction
+    const publicKey = this.instances.bob.getTokenSignature(this.contractAddress)!.publicKey;
+    const pk_bob = uint8ArrayToBytes32(publicKey);
+
+    // Bob creat his first auction
+    const tx1_bob = await this.auction
       .connect(this.signers.bob)
-      .CreateNewAuction(hope, "test1", "coking coal", 10, 100, 5, 10);
-    await tx_bob.wait();
+      .CreateNewAuction(pk_bob, "test1", "coking coal", 10, 100, 5, 10);
+    await tx1_bob.wait();
     expect(await this.auction.Auction_Count(this.signers.bob.address)).to.equal(1);
+
+    // Bob create his second auction
+    const tx2_bob = await this.auction
+      .connect(this.signers.bob)
+      .CreateNewAuction(pk_bob, "test2", "wood coal", 10, 100, 10, 10);
+    await tx2_bob.wait();
+    expect(await this.auction.Auction_Count(this.signers.bob.address)).to.equal(2);
+
+    // Bob create his third auction, this will be rejected.
+    await expect(
+      this.auction.connect(this.signers.bob).CreateNewAuction(pk_bob, "test3", "coking coal", 10, 100, 5, 10),
+    ).to.be.rejectedWith(
+      Error,
+      "You have reached the maximum number of auction initiations and cannot start a new auction. We recommend that you either remove previous auctions or conclude them as soon as possible.",
+    );
+
+    expect(await this.auction.Auction_Count(this.signers.bob.address)).to.equal(2);
+
+    // Now Alice change the limit to 3 and Bob can create his third auction
+    const tx_alice = await this.auction.connect(this.signers.alice).SetAuctionLimit(3);
+    await tx_alice.wait();
+    // Now Bob can create his third auction
+    const tx3_bob = await this.auction
+      .connect(this.signers.bob)
+      .CreateNewAuction(pk_bob, "test4", "wood coal", 10, 100, 10, 10);
+    await tx3_bob.wait();
+    expect(await this.auction.Auction_Count(this.signers.bob.address)).to.equal(3);
   });
+
+  /**
+   * TODO: the test of retract and terminate.
+   */
 });
