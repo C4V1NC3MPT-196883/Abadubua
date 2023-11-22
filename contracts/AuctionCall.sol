@@ -6,6 +6,7 @@ import "fhevm/lib/TFHE.sol";
 
 contract AuctionCall {
     event NewOrderAlert(address creator, address auction_address, AuctionInstance.OrderDetail orderdetail);
+    event AuctionLimitChange(string changelog);
 
     address private owner;
     mapping(address => uint) public Auction_Count; // 同一个卖方当前有多少个拍卖订单在进行
@@ -13,7 +14,10 @@ contract AuctionCall {
     uint public auction_limit;
 
     constructor(uint _auction_limit) {
-        require(_auction_limit >= 1, "The limit of auctions in progress should be at least 1.");
+        require(
+            _auction_limit >= 1,
+            "The limit of auctions simultaneously launched by any seller should be at least 1."
+        );
         require(msg.sender == tx.origin, "You are not an external account in Ethereum.");
         owner = msg.sender;
         auction_limit = _auction_limit;
@@ -21,6 +25,12 @@ contract AuctionCall {
 
     function SetAuctionLimit(uint _auction_limit) public onlyOwner {
         auction_limit = _auction_limit;
+        emit AuctionLimitChange(
+            string.concat(
+                "The limit of auctions simultaneously launched by any seller has been adjusted to",
+                string(abi.encodePacked(auction_limit))
+            )
+        );
     }
 
     function RetractAuction() public {

@@ -13,27 +13,34 @@ import "fhevm/lib/TFHE.sol";
 // TODO:加通知：卖家发起了撤回；
 //             结果出来了；
 //             中心修改了auction_limit；
+// FIXME:如何在后端加入publickey？
 contract AuctionInstance {
     // 本合约用于构造拍卖订单的实例，卖方向中心（以./AuctionCall.sol为中心合约）传递订单相关参数后创建本合约。
     // 本合约创建后，买方只与本合约交互，进行报价、撤回报价等操作；报价时间截止后卖方进行报价锁定以及密文比价，最终获得拍卖结果。
-    OrderDetail public orderdetail; // 全局变量orderdetail：用于存储买方可见的订单细节。
-    address public _owner; // 全局变量_owner：用于指示卖方地址。
+    address public owner; // 全局变量_owner：用于指示卖方地址。
     address public address_auctioncall; // 全局变量address_auctioncall：用于指示中心合约地址。
     auction_state public currentstate;
-    uint public BiddersNum;
-    mapping(address => Bidding) Biddinglist; // 定义Biddinglist用于报价环节中买方报价状态的更新。
-    BidderInfo[] BiddersInfoList; // 定义BiddingAddress用于存储与拍卖订单交互的买方地址，与Biddinglist配合便于锁价后对所有待排序订单的预处理。
     uint8 TrunctionNumber;
-    ExtractedFinal_parsed[] SortedParsedBiddings;
     uint8 WinnersNum;
-    bytes32 owner_publickey;
     uint8 quantitylogrange = 16;
+    uint public BiddersNum;
+    bytes32 owner_publickey;
+    mapping(address => Bidding) Biddinglist; // 定义Biddinglist用于报价环节中买方报价状态的更新。
+    OrderDetail public orderdetail; // 全局变量orderdetail：用于存储买方可见的订单细节。
+    BidderInfo[] BiddersInfoList; // 定义BiddingAddress用于存储与拍卖订单交互的买方地址，与Biddinglist配合便于锁价后对所有待排序订单的预处理。
+    ExtractedFinal_parsed[] SortedParsedBiddings;
+
+    event RetractEvent(string retractmsg);
+    event ClosedEvent(string closedmsg);
+    event UnsoldEvent(string unsoldmsg);
+    event FinishedEvent(string finishedmsg);
+    event BidEvent(string bidmsg);
 
     constructor(OrderDetail memory _orderdetail, bytes32 _publickey) {
         // 合约构造函数，通过./AuctionCall.sol的CreateNewAuction函数中传递的参数_orderdetail来创建拍卖订单。
         orderdetail = _orderdetail; // 将参数_orderdetail写入全局变量orderdetail，记录订单可视细节。
         address_auctioncall = msg.sender; // 将创建此合约的地址（即CreateNewAuction所在的实例合约）写入全局变量address_auctioncall，作为本合约的中心合约地址。
-        _owner = tx.origin; // 将CreateNewAuction的调用者地址写入全局变量_owner，作为本合约的创建者，即拍卖订单的卖方。
+        owner = tx.origin; // 将CreateNewAuction的调用者地址写入全局变量_owner，作为本合约的创建者，即拍卖订单的卖方。
         //require(AddressFromPublicKey(_publickey) == _owner, "The public key is not the address of the owner.");
         owner_publickey = _publickey; // 将CreateNewAuction的调用者公钥写入全局变量owner_publickey，记录拍卖订单的卖方公钥。
         TrunctionNumber = uint8(orderdetail.Quantity / orderdetail.Minimalsplit);
@@ -45,6 +52,7 @@ contract AuctionInstance {
         (bool hasbeen_retracted, ) = address_auctioncall.call(abi.encodeWithSignature("RetractAuction()"));
         require(hasbeen_retracted, "The call of retract has failed.");
         currentstate = auction_state.retracted;
+        emit RetractEvent("The auction has been retracted by the launcher.");
     }
 
     function CheckState() public returns (auction_state) {
@@ -55,8 +63,9 @@ contract AuctionInstance {
             currentstate != auction_state.unsold ||
             currentstate != auction_state.finished
         ) {
-            if (block.timestamp > orderdetail.Deadline) {
+            if (currentstate != auction_state.closed && block.timestamp > orderdetail.Deadline) {
                 currentstate = auction_state.closed;
+                emit ClosedEvent("The auction has been closed.");
             }
             return currentstate;
         }
@@ -69,7 +78,7 @@ contract AuctionInstance {
         bytes memory _priceinunit,
         bytes memory _quantity,
         bytes32 _publickey
-    ) external OutsourceImmutability AddressMatchesPublickey(_publickey, msg.sender) AuctionOn forbidOwner {
+    ) external OutsourceImmutability AuctionOn forbidOwner {
         euint32 epriceinunit = TFHE.asEuint32(_priceinunit); // 将单位报价的密文bytes转化为euint32类型的密文。
         euint32 equantity = TFHE.asEuint32(_quantity); // 将认领数量的密文bytes转化为euint32类型的密文。
         euint32 ereservepriceinunit = TFHE.asEuint32(orderdetail.Reserve_PriceInUnit); // 将拍卖订单中单位底价的明文转化为euint32类型的密文。
@@ -93,6 +102,7 @@ contract AuctionInstance {
             BiddersInfoList.push(BidderInfo(msg.sender, _publickey));
         }
         Biddinglist[msg.sender] = Bidding(epriceinunit, equantity, block.timestamp, true);
+        emit BidEvent("Someone bidded on the auction.");
         // 将上述转化后的满足报价条件的买方报价信息存储至Biddinglist中，如果买方此前已有报价，则可以通过此方法覆盖，
         // Biddinglist中只会记录一个关于该买方的报价信息。
     }
@@ -116,9 +126,10 @@ contract AuctionInstance {
         BiddersNum = BiddersInfoList.length;
         //SortedParsedBiddings = new ExtractedFinal_parsed[](TrunctionNumber);
         if (BiddersNum == 0) {
-            (bool hasbeen_terminated, ) = address_auctioncall.call(abi.encodeWithSignature("TerminateAuction()"));
-            require(hasbeen_terminated, "The call of retract has failed.");
+            (bool has_terminated, ) = address_auctioncall.call(abi.encodeWithSignature("TerminateAuction()"));
+            require(has_terminated, "The call of retract has failed.");
             currentstate = auction_state.unsold;
+            emit UnsoldEvent("No qualified biddings received and the auction has ended with no winners.");
             return;
         }
         ExtractedFinal_linearized[] memory SortedLinearizedBiddings = new ExtractedFinal_linearized[](TrunctionNumber);
@@ -175,9 +186,13 @@ contract AuctionInstance {
             );
         }
         WinnersNum = TFHE.decrypt(winnersnumber());
-        (bool hasbeen_terminated, ) = address_auctioncall.call(abi.encodeWithSignature("TerminateAuction()"));
-        require(hasbeen_terminated, "The call of retract has failed.");
+
+        (bool has_finished, ) = address_auctioncall.call(abi.encodeWithSignature("TerminateAuction()"));
+        require(has_finished, "The call of retract has failed.");
         currentstate = auction_state.finished;
+        emit FinishedEvent(
+            string.concat("The auction has ended with ", string(abi.encodePacked(WinnersNum)), " winners.")
+        );
     }
 
     function RetriveResults() public AuctionFinished returns (TopBidder[] memory, address[] memory) {
@@ -224,9 +239,9 @@ contract AuctionInstance {
         return TFHE.reencrypt(cmyquantity, mypublickey);
     }
 
-    function AddressFromPublicKey(bytes32 publicKey) private pure returns (address) {
-        return address(uint160(uint256(keccak256(abi.encodePacked(publicKey)))));
-    }
+    // function AddressFromPublicKey(bytes32 publicKey) private pure returns (address) {
+    //     return address(uint160(uint256(keccak256(abi.encodePacked(publicKey)))));
+    // }
 
     function CipherLinearization(Bidding memory bidding) private view returns (euint32) {
         // 定义一个私有函数，用于将报价信息中的多属性密文转化为线性化后的密文，将优先级较高的属性放置到高位时需要对低位属性的长度进行扩展补偿，此处设置低位的数量属性补偿为16位。
@@ -386,31 +401,31 @@ contract AuctionInstance {
         bytes32 Bidder_Publickey; // Bidder_publickey：买方公钥。
     }
 
-    modifier AddressMatchesPublickey(bytes32 _publickey, address _address) {
-        // 用于检查公钥与地址匹配性的修饰符。
-        require(
-            _address == address(uint160(uint256(keccak256(abi.encodePacked(_publickey))))),
-            "Public key and address are mismatched."
-        );
-        _;
-    }
+    // modifier AddressMatchesPublickey(bytes32 _publickey, address _address) {
+    //     // 用于检查公钥与地址匹配性的修饰符。
+    //     require(
+    //         _address == address(uint160(uint256(keccak256(abi.encodePacked(_publickey))))),
+    //         "Public key and address are mismatched."
+    //     );
+    //     _;
+    // }
 
     modifier onlyOwner_self() {
         // 判断是否由卖方本人直接调用。
-        require(msg.sender == _owner, "You are not the creator of this auction contract.");
+        require(msg.sender == owner, "You are not the creator of this auction contract.");
         _;
     }
 
     modifier forbidOwner() {
         // 防止卖方本人直接或间接调用的修饰符，主要用于避免卖方对报价环节的干涉。
-        require(tx.origin != _owner, "The creator himself should not interfere in the procedure of bidding.");
+        require(tx.origin != owner, "The creator himself should not interfere in the procedure of bidding.");
         _;
     }
 
     modifier onlyOwner_center() {
         // 判断是否由卖方本人通过中心合约进行调用。
         require(
-            tx.origin == _owner && msg.sender == address_auctioncall,
+            tx.origin == owner && msg.sender == address_auctioncall,
             "You are not the creator of this auction contract."
         );
         _;
