@@ -10,7 +10,7 @@ contract AuctionCall {
 
     address private owner;
     mapping(address => uint) public Auction_Count; // 同一个卖方当前有多少个拍卖订单在进行
-    mapping(address => address) Auction_Owner; // 指示拍卖合约地址对应的卖方地址
+    mapping(address => address) public Auction_Owner; // 指示拍卖合约地址对应的卖方地址
     uint public auction_limit;
 
     //AuctionInstance public temporary_contract;
@@ -70,6 +70,7 @@ contract AuctionCall {
         //temporary_contract = new_auction;
         address newinstance_Address = address(new_auction);
         Auction_Count[msg.sender]++;
+        Auction_Owner[newinstance_Address] = msg.sender;
         emit NewOrderAlert(msg.sender, newinstance_Address, orderdetail);
     }
 
