@@ -33,7 +33,6 @@ describe("AuctionInstance", function () {
             100,
             10,
             15,
-            120,
         ]);
     });
 
