@@ -33,6 +33,7 @@ describe("AuctionInstance", function () {
             100,
             10,
             15,
+            120,
         ]);
     });
 
@@ -66,5 +67,25 @@ describe("AuctionInstance", function () {
         expect(await this.InstanceContract.connect(this.signers.bob).RetractMyAuction())
             .to.emit(this.InstanceContract, "ClosedEvent")
             .withArgs("The auction has been closed.");
+    });
+
+    it("correct retraction", async function () {
+        // Carlo want to retract Bob's auction, this should be rejected!
+        await expect(this.InstanceContract.connect(this.signers.carol).RetractMyAuction()).to.be.rejectedWith(
+            "You are not the creator of this auction contract.",
+        );
+
+        // Now Bob retract his auction.
+        const tx = await this.InstanceContract.connect(this.signers.bob).RetractMyAuction();
+        await tx.wait();
+
+        // should set the  state of this auction to retracted.
+        const get_state = await this.InstanceContract.CheckState();
+        expect(await this.InstanceContract.currentstate()).to.equal(2);
+
+        //Now Bob want to retract again, this should be rejected!
+        await expect(this.InstanceContract.connect(this.signers.bob).RetractMyAuction()).to.be.rejectedWith(
+            "No auction with this address is in progress.",
+        );
     });
 });
