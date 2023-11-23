@@ -118,7 +118,4 @@ describe("AuctionCall", function () {
         const newinstanceaddress = await logsoftx1.logs[0].args[1];
         expect(await this.auction.Auction_Owner(newinstanceaddress)).to.equal(this.signers.bob.address);
     });
-    /**
-     * TODO: the test of retract and terminate.
-     */
 });

@@ -34,7 +34,7 @@ export async function getnewcontractfromdeploy(): Promise<Address[]> {
 
     const tx_bob = await contractauctioncall
         .connect(signers.bob)
-        .CreateNewAuction(pk_bob, "jinitaimei", "trashcoal", 10, 100, 10, 120);
+        .CreateNewAuction(pk_bob, "jinitaimei", "trashcoal", 10, 100, 10, 15);
     const deploylogs_launcherbob = await tx_bob.wait();
     const addressauctioninstance = await deploylogs_launcherbob.logs[0].args[1];
     return [addressauctioninstance, addressauctioncall, addressbob];
