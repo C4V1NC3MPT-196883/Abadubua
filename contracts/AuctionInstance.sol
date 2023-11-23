@@ -47,7 +47,7 @@ contract AuctionInstance {
         currentstate = auction_state.on;
     }
 
-    function RetractMyAuction() public onlyOwner_self {
+    function RetractMyAuction() public AuctionOn onlyOwner_self {
         // 卖方撤回本合约代表的拍卖，此方法只能由卖方通过中心合约的RetractAuction进行消息调用。
         require(currentstate != auction_state.retracted, "No auction with this address is in progress.");
         (bool hasbeen_retracted, ) = address_auctioncall.call(abi.encodeWithSignature("RetractAuction()"));
