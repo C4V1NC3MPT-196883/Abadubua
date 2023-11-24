@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENCED
 pragma solidity >=0.8.0 <0.9.0;
 
-import "./AuctionCall.sol";
+//import "./AuctionCall.sol";
 import "fhevm/lib/TFHE.sol";
 
 // TODO:调整顺序 把public放前面。
@@ -56,7 +56,7 @@ contract AuctionInstance {
         emit RetractEvent("The auction has been retracted by the launcher.");
     }
 
-    function CheckState() public returns (auction_state) {
+    function StateRefresh() public returns (auction_state) {
         // 检查拍卖状态的核心函数，如果订单处于不可变状态则直接返回auction_state，否则检查拍卖截止时间是否已到，若到则调整状态为closed。
         // CheckState还可以用于整个拍卖流程的状态控制流，其它public函数在调用时可以根据调用CheckState的修饰符控制。
         if (
@@ -94,6 +94,7 @@ contract AuctionInstance {
             TFHE.decrypt(condition4price),
             "The price for the current bidding is invalid, your state of bidding remains unchanged."
         );
+        //FIXME:少帮交易中心省事儿；
         require( // 判断买方认领数量是否满足拍卖订单要求。
             TFHE.decrypt(condition4quantity),
             "The quantity for the current bidding is invalid, your state of bidding remains unchanged."
@@ -443,7 +444,7 @@ contract AuctionInstance {
         // 4、买方在拍卖截止时间确实已经达到的前提下，在以上三种情况未发生时进行违规的报价或撤销报价操作，此时auction_state的修改必须要被动触发，以防状态修改延迟带来的不合法操作。
         // 在auction_state被动触发的意义下，无法通过回滚来触发错误，否则状态修改失败。
         // 如果通过报错的方式回滚，虽然此时买方的违规操作仍然无法实现，但是auction_state仍可读为true，这对于其它买方可能会产生信息误导；而不回滚带来的调用损失可以视作是对买方违规操作的惩罚。
-        CheckState();
+        StateRefresh();
         if (currentstate == auction_state.on) {
             _;
         } else {
@@ -453,7 +454,7 @@ contract AuctionInstance {
 
     modifier AuctionClosed() {
         // 用于检查拍卖订单是否已经截止，如果确实超过了截止时间，则auction_state修改为false，此时本合约不再接受新的订单。
-        CheckState();
+        StateRefresh();
         if (currentstate == auction_state.closed) {
             _;
         } else {
@@ -463,7 +464,7 @@ contract AuctionInstance {
 
     modifier AuctionFinished() {
         // 用于检查拍卖订单是否已经截止，如果确实超过了截止时间，则auction_state修改为false，此时本合约不再接受新的订单。
-        CheckState();
+        StateRefresh();
         if (currentstate == auction_state.finished) {
             _;
         } else {

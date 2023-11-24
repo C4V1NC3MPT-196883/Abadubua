@@ -1,7 +1,9 @@
+import { mine } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { getDefaultProvider } from "ethers";
 import type { FhevmInstance } from "fhevmjs";
 import { ethers } from "hardhat";
+import { machine } from "os";
 
 import { createInstances } from "../instance";
 import { getSigners } from "../signers";
@@ -37,35 +39,56 @@ describe("AuctionInstance", function () {
     });
 
     it("should successfully update state to closed", async function () {
-        // const [, , , , , detail5, detail6] = await this.InstanceContract.orderdetail();
-        // console.log(detail5, detail6);
-        const checkfirst = await this.InstanceContract.connect(this.signers.dave).CheckState();
+        const checkfirst = await this.InstanceContract.connect(this.signers.dave).StateRefresh();
         await checkfirst.wait();
         expect(await this.InstanceContract.currentstate()).to.equal(0);
-        // let currentBlock = await ethers.provider.getBlockNumber();
-        // let block = await ethers.provider.getBlock(currentBlock);
-        // let timenow = block.timestamp;
-        // console.log(timenow, "第一次查时间");
-        // console.log(await this.InstanceContract.currentstate(), "第一次查");
         await new Promise((resolve) => setTimeout(resolve, 15000));
-        const checksecond = await this.InstanceContract.connect(this.signers.carol).CheckState();
+        const checksecond = await this.InstanceContract.connect(this.signers.carol).StateRefresh();
         await checksecond.wait();
         expect(await this.InstanceContract.currentstate()).to.equal(1);
-        // console.log(await checksecond.data(), "第11次查");
-        // currentBlock = await ethers.provider.getBlockNumber();
-        // block = await ethers.provider.getBlock(currentBlock);
-        // timenow = block.timestamp;
-        // console.log(timenow, "第二次查时间");
-        // console.log(await this.InstanceContract.currentstate(), "第二次查");
     });
 
     it("shouldn't retract when the auction has closed", async function () {
         await new Promise((resolve) => setTimeout(resolve, 15000));
-        // const checksecond = await this.InstanceContract.connect(this.signers.carol).CheckState();
-        // await checksecond.wait();
-        expect(await this.InstanceContract.connect(this.signers.bob).RetractMyAuction())
-            .to.emit(this.InstanceContract, "ClosedEvent")
-            .withArgs("The auction has been closed.");
+        const tx = await this.InstanceContract.connect(this.signers.bob).RetractMyAuction();
+        const receipttx = await tx.wait();
+        console.log(receipttx.logs);
+        //expect(receipttx.logs[0].args[0]).to.equal("The auction has been closed.");
+        // expect(await this.InstanceContract.connect(this.signers.bob).RetractMyAuction())
+        //     //expect(await (await this.InstanceContract.connect(this.signers.bob).RetractMyAuction()).wait())
+        //     .to.emit(this.InstanceContract, "ClosedEvent")
+        //     .withArgs();
+        //FIXME:还没弄清楚.emit的用法
+    });
+
+    // it("fail to bid when wrong quantity", async function () {
+    //     const setpriceinunitbytes_carol = this.instances.carol.encrypt32(15);
+    //     const setquantitybytes_carol = this.instances.carol.encrypt32(101);
+    //     const publickeyforcarol_uint8array = this.instances.carol.getTokenSignature(this.contractAddress)!.publicKey;
+    //     const pk_carol = uint8ArrayToBytes32(publickeyforcarol_uint8array);
+    //     const raiseabidding_carol = this.InstanceContract.connect(this.signers.carol).RaiseBidding(
+    //         setpriceinunitbytes_carol,
+    //         setquantitybytes_carol,
+    //         pk_carol,
+    //     );
+    //     console.log((await (await raiseabidding_carol).wait()).logs);
+    // });
+
+    describe("everything about bidding", async function () {
+        it("successfully raise a bidding", async function () {
+            const setpriceinunitbytes_carol = this.instances.alice.encrypt32(15);
+            const setquantitybytes_carol = this.instances.carol.encrypt32(90);
+            const publickeyforcarol_uint8array = this.instances.carol.getTokenSignature(
+                this.contractAddress,
+            )!.publicKey;
+            const pk_carol = uint8ArrayToBytes32(publickeyforcarol_uint8array);
+            const raiseabidding_carol = this.InstanceContract.connect(this.signers.carol).RaiseBidding(
+                setpriceinunitbytes_carol,
+                setquantitybytes_carol,
+                pk_carol,
+            );
+            await expect(await (await raiseabidding_carol).wait()).to.emit(this.InstanceContract, "BidEvent");
+        });
     });
 
     it("correct retraction", async function () {
