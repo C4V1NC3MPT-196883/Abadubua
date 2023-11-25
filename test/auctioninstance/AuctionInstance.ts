@@ -10,11 +10,15 @@ import { getSigners } from "../signers";
 import { createTransaction } from "../utils";
 import { getnewcontractfromdeploy, uint8ArrayToBytes32 } from "./AuctionInstance.fixture";
 
-//import { uint8ArrayToBytes32 } from "./AuctionInstance.fixture";
+// pnpm fhevm:faucet:alice && pnpm fhevm:faucet:bob && pnpm fhevm:faucet:carol && pnpm fhevm:faucet:dave && pnpm fhevm:faucet:eve && pnpm fhevm:faucet:fraud && pnpm fhevm:faucet:grace && pnpm fhevm:faucet:hausdorff
 
 describe("AuctionInstance", function () {
     before(async function () {
         this.signers = await getSigners(ethers);
+        this.timeout(120000); // 设置每条测试上限为2分钟。
+    });
+
+    beforeEach(async function () {
         [this.contractAddress, this.callcontractAddress, this.callbobAddress] = await getnewcontractfromdeploy();
         this.InstanceContract = await ethers.getContractAt("AuctionInstance", this.contractAddress);
         this.instances = await createInstances(this.contractAddress, ethers, this.signers);
@@ -48,17 +52,44 @@ describe("AuctionInstance", function () {
         expect(await this.InstanceContract.currentstate()).to.equal(1);
     });
 
-    it("shouldn't retract when the auction has closed", async function () {
-        await new Promise((resolve) => setTimeout(resolve, 15000));
-        const tx = await this.InstanceContract.connect(this.signers.bob).RetractMyAuction();
-        const receipttx = await tx.wait();
-        console.log(receipttx.logs);
-        //expect(receipttx.logs[0].args[0]).to.equal("The auction has been closed.");
-        // expect(await this.InstanceContract.connect(this.signers.bob).RetractMyAuction())
-        //     //expect(await (await this.InstanceContract.connect(this.signers.bob).RetractMyAuction()).wait())
-        //     .to.emit(this.InstanceContract, "ClosedEvent")
-        //     .withArgs();
-        //FIXME:还没弄清楚.emit的用法
+    describe("everything about auction retraction.", function () {
+        it("shouldn't retract when the auction has closed", async function () {
+            await new Promise((resolve) => setTimeout(resolve, 15000));
+            const tx = await this.InstanceContract.connect(this.signers.bob).RetractMyAuction();
+            const currentstateinfo = await this.InstanceContract.currentstate();
+            if (currentstateinfo == 0) {
+                await expect(tx.wait())
+                    .to.emit(this.InstanceContract, "ClosedEvent")
+                    .withArgs("The auction has been closed.");
+            }
+            expect(await this.InstanceContract.currentstate()).to.equal(1);
+        });
+
+        it("shouldn't retract when not the creator", async function () {
+            const tx = this.InstanceContract.connect(this.signers.eve).RetractMyAuction();
+            await expect(tx).to.be.rejectedWith("You are not the creator of this auction contract.");
+        });
+
+        it("correct retraction by bob himself and the twice retraction will effect nothing", async function () {
+            // Bob retract his auction.
+            const tx = this.InstanceContract.connect(this.signers.bob).RetractMyAuction();
+            await (await tx).wait();
+
+            // should set the  state of this auction to retracted
+            expect(await this.InstanceContract.currentstate()).to.equal(2);
+
+            // Still, others cannot retract the auction.
+            const ttx = this.InstanceContract.connect(this.signers.eve).RetractMyAuction();
+            await expect(ttx).to.be.rejectedWith("You are not the creator of this auction contract.");
+
+            // Now, Bob wants to retract twice.
+            const tttx = this.InstanceContract.connect(this.signers.bob).RetractMyAuction();
+            await expect((await tttx).wait())
+                .to.emit(this.InstanceContract, "ErrorOnEvent")
+                .withArgs(
+                    "The auction is not receiving biddings and therefore should be locked then. Your operations failed.",
+                );
+        });
     });
 
     // it("fail to bid when wrong quantity", async function () {
@@ -87,24 +118,9 @@ describe("AuctionInstance", function () {
                 setquantitybytes_carol,
                 pk_carol,
             );
-            await expect(await (await raiseabidding_carol).wait()).to.emit(this.InstanceContract, "BidEvent");
+            await expect(await (await raiseabidding_carol).wait())
+                .to.emit(this.InstanceContract, "BidEvent")
+                .withArgs("Someone bidded on the auction.");
         });
-    });
-
-    it("correct retraction", async function () {
-        // Carlo want to retract Bob's auction, this should be rejected!
-        await expect(this.InstanceContract.connect(this.signers.carol).RetractMyAuction()).to.be.rejectedWith(
-            "You are not the creator of this auction contract.",
-        );
-
-        // Now Bob retract his auction.
-        const tx = await this.InstanceContract.connect(this.signers.bob).RetractMyAuction();
-        await tx.wait();
-
-        // should set the  state of this auction to retracted.
-        const get_state = await this.InstanceContract.CheckState();
-        expect(await this.InstanceContract.currentstate()).to.equal(2);
-
-        //TODO: Bob want to retract again
     });
 });

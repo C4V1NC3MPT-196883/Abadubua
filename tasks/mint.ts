@@ -6,20 +6,20 @@ import { Signers, getSigners } from "../test/signers";
 import { FhevmInstances } from "../test/types";
 
 task("task:mint")
-  .addParam("mint", "Tokens to mint")
-  .addParam("account", "Specify which account [alice, bob, carol, dave]")
-  .setAction(async function (taskArguments: TaskArguments, hre) {
-    const { ethers, deployments } = hre;
-    const EncryptedERC20 = await deployments.get("EncryptedERC20");
-    const signers = await getSigners(ethers);
+    .addParam("mint", "Tokens to mint")
+    .addParam("account", "Specify which account [alice, bob, carol, dave, eve, fraud, grace, hausdorff]")
+    .setAction(async function (taskArguments: TaskArguments, hre) {
+        const { ethers, deployments } = hre;
+        const EncryptedERC20 = await deployments.get("EncryptedERC20");
+        const signers = await getSigners(ethers);
 
-    const instances = await createInstances(EncryptedERC20.address, ethers, signers);
+        const instances = await createInstances(EncryptedERC20.address, ethers, signers);
 
-    const encryptedERC20 = await ethers.getContractAt("EncryptedERC20", EncryptedERC20.address);
+        const encryptedERC20 = await ethers.getContractAt("EncryptedERC20", EncryptedERC20.address);
 
-    await encryptedERC20
-      .connect(signers[taskArguments.account as keyof Signers])
-      .mint(instances[taskArguments.account as keyof FhevmInstances].encrypt32(+taskArguments.mint));
+        await encryptedERC20
+            .connect(signers[taskArguments.account as keyof Signers])
+            .mint(instances[taskArguments.account as keyof FhevmInstances].encrypt32(+taskArguments.mint));
 
-    console.log("Mint done: ", taskArguments.mint);
-  });
+        console.log("Mint done: ", taskArguments.mint);
+    });

@@ -35,6 +35,9 @@ contract AuctionInstance {
     event UnsoldEvent(string unsoldmsg);
     event FinishedEvent(string finishedmsg);
     event BidEvent(string bidmsg);
+    event ErrorOnEvent(string erroronmsg);
+    event ErrorClosedEvent(string errorclosedmsg);
+    event ErrorFinishedEvent(string errorfinishedmsg);
 
     constructor(OrderDetail memory _orderdetail, bytes32 _publickey) {
         // 合约构造函数，通过./AuctionCall.sol的CreateNewAuction函数中传递的参数_orderdetail来创建拍卖订单。
@@ -47,9 +50,8 @@ contract AuctionInstance {
         currentstate = auction_state.on;
     }
 
-    function RetractMyAuction() public AuctionOn onlyOwner_self {
+    function RetractMyAuction() public onlyOwner_self AuctionOn {
         // 卖方撤回本合约代表的拍卖，此方法只能由卖方通过中心合约的RetractAuction进行消息调用。
-        require(currentstate != auction_state.retracted, "No auction with this address is in progress.");
         (bool hasbeen_retracted, ) = address_auctioncall.call(abi.encodeWithSignature("RetractAuction()"));
         require(hasbeen_retracted, "The call of retract has failed.");
         currentstate = auction_state.retracted;
@@ -79,7 +81,7 @@ contract AuctionInstance {
         bytes memory _priceinunit,
         bytes memory _quantity,
         bytes32 _publickey
-    ) external OutsourceImmutability AuctionOn forbidOwner {
+    ) external forbidOwner OutsourceImmutability AuctionOn {
         euint32 epriceinunit = TFHE.asEuint32(_priceinunit); // 将单位报价的密文bytes转化为euint32类型的密文。
         euint32 equantity = TFHE.asEuint32(_quantity); // 将认领数量的密文bytes转化为euint32类型的密文。
         euint32 ereservepriceinunit = TFHE.asEuint32(orderdetail.Reserve_PriceInUnit); // 将拍卖订单中单位底价的明文转化为euint32类型的密文。
@@ -109,7 +111,7 @@ contract AuctionInstance {
         // Biddinglist中只会记录一个关于该买方的报价信息。
     }
 
-    function RetractBidding() external AuctionOn OutsourceImmutability forbidOwner {
+    function RetractBidding() external OutsourceImmutability forbidOwner AuctionOn {
         // 修饰符功能如前，买方通过调用该函数对Biddinglist中记录的报价进行撤销。
         // 注意到Biddinglist对任一地址只能同时存在一个报价信息，因此撤回时只需初始化报价时间，后续考察有效报价时通过筛选报价时间的条件即可。
         Biddinglist[msg.sender].Liveness = false;
@@ -197,7 +199,7 @@ contract AuctionInstance {
         );
     }
 
-    function RetriveResults() public AuctionFinished returns (TopBidder[] memory, address[] memory) {
+    function RetriveResults() public onlyOwner_self AuctionFinished returns (TopBidder[] memory, address[] memory) {
         TopBidder[] memory TopBidders = new TopBidder[](WinnersNum);
         for (uint i = 0; i < WinnersNum; i++) {
             TopBidders[i] = TopBidder(
@@ -240,10 +242,6 @@ contract AuctionInstance {
         }
         return TFHE.reencrypt(cmyquantity, mypublickey);
     }
-
-    // function AddressFromPublicKey(bytes32 publicKey) private pure returns (address) {
-    //     return address(uint160(uint256(keccak256(abi.encodePacked(publicKey)))));
-    // }
 
     function CipherLinearization(Bidding memory bidding) private view returns (euint32) {
         // 定义一个私有函数，用于将报价信息中的多属性密文转化为线性化后的密文，将优先级较高的属性放置到高位时需要对低位属性的长度进行扩展补偿，此处设置低位的数量属性补偿为16位。
@@ -403,15 +401,6 @@ contract AuctionInstance {
         bytes32 Bidder_Publickey; // Bidder_publickey：买方公钥。
     }
 
-    // modifier AddressMatchesPublickey(bytes32 _publickey, address _address) {
-    //     // 用于检查公钥与地址匹配性的修饰符。
-    //     require(
-    //         _address == address(uint160(uint256(keccak256(abi.encodePacked(_publickey))))),
-    //         "Public key and address are mismatched."
-    //     );
-    //     _;
-    // }
-
     modifier onlyOwner_self() {
         // 判断是否由卖方本人直接调用。
         require(msg.sender == owner, "You are not the creator of this auction contract.");
@@ -448,6 +437,9 @@ contract AuctionInstance {
         if (currentstate == auction_state.on) {
             _;
         } else {
+            emit ErrorOnEvent(
+                "The auction is not receiving biddings and therefore should be locked then. Your operations failed."
+            );
             return;
         }
     }
@@ -458,6 +450,7 @@ contract AuctionInstance {
         if (currentstate == auction_state.closed) {
             _;
         } else {
+            emit ErrorClosedEvent("The auction hasn't been closed yet. Your operations failed.");
             return;
         }
     }
@@ -468,6 +461,7 @@ contract AuctionInstance {
         if (currentstate == auction_state.finished) {
             _;
         } else {
+            emit ErrorFinishedEvent("The auction hasn't been settled yet. Your operations failed.");
             return;
         }
     }
