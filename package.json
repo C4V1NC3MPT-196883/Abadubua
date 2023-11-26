@@ -91,7 +91,8 @@
         "fhevm:faucet:eve": "docker exec -i fhevm faucet $(npx hardhat task:getEthereumAddressEve)",
         "fhevm:faucet:fraud": "docker exec -i fhevm faucet $(npx hardhat task:getEthereumAddressFraud)",
         "fhevm:faucet:grace": "docker exec -i fhevm faucet $(npx hardhat task:getEthereumAddressGrace)",
-        "fhevm:faucet:hausdorff": "docker exec -i fhevm faucet $(npx hardhat task:getEthereumAddressHausdorff)"
+        "fhevm:faucet:hausdorff": "docker exec -i fhevm faucet $(npx hardhat task:getEthereumAddressHausdorff)",
+        "fhevm:faucet:once4all": "pnpm fhevm:faucet:alice && pnpm fhevm:faucet:bob && pnpm fhevm:faucet:carol && pnpm fhevm:faucet:dave && pnpm fhevm:faucet:eve && pnpm fhevm:faucet:fraud && pnpm fhevm:faucet:grace && pnpm fhevm:faucet:hausdorff"
     },
     "dependencies": {
         "@openzeppelin/contracts": "^4.9.2"

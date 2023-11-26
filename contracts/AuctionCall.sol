@@ -66,7 +66,7 @@ contract AuctionCall {
             block.timestamp,
             block.timestamp + _duration
         );
-        AuctionInstance new_auction = new AuctionInstance(orderdetail, _publickey);
+        AuctionInstance new_auction = new AuctionInstance(orderdetail, _publickey, owner);
         address newinstance_Address = address(new_auction);
         Auction_Count[msg.sender]++;
         Auction_Owner[newinstance_Address] = msg.sender;

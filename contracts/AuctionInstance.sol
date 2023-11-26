@@ -19,15 +19,16 @@ contract AuctionInstance {
     // 本合约创建后，买方只与本合约交互，进行报价、撤回报价等操作；报价时间截止后卖方进行报价锁定以及密文比价，最终获得拍卖结果。
     address public owner; // 全局变量_owner：用于指示卖方地址。
     address public address_auctioncall; // 全局变量address_auctioncall：用于指示中心合约地址。
+    address private address_centeradmin; // 全局变量address_centeradmin：用于指示中心管理员地址。
     auction_state public currentstate;
     uint8 TrunctionNumber;
     uint8 WinnersNum;
     uint8 quantitylogrange = 16;
     uint public BiddersNum;
     bytes32 owner_publickey;
-    mapping(address => Bidding) Biddinglist; // 定义Biddinglist用于报价环节中买方报价状态的更新。
+    mapping(address => Bidding) public Biddinglist; // 定义Biddinglist用于报价环节中买方报价状态的更新。
     OrderDetail public orderdetail; // 全局变量orderdetail：用于存储买方可见的订单细节。
-    BidderInfo[] BiddersInfoList; // 定义BiddingAddress用于存储与拍卖订单交互的买方地址，与Biddinglist配合便于锁价后对所有待排序订单的预处理。
+    BidderInfo[] public BiddersInfoList; // 定义BiddingAddress用于存储与拍卖订单交互的买方地址，与Biddinglist配合便于锁价后对所有待排序订单的预处理。
     ExtractedFinal_parsed[] SortedParsedBiddings;
 
     event RetractEvent(string retractmsg);
@@ -39,7 +40,7 @@ contract AuctionInstance {
     event ErrorClosedEvent(string errorclosedmsg);
     event ErrorFinishedEvent(string errorfinishedmsg);
 
-    constructor(OrderDetail memory _orderdetail, bytes32 _publickey) {
+    constructor(OrderDetail memory _orderdetail, bytes32 _publickey, address _centeradmin) {
         // 合约构造函数，通过./AuctionCall.sol的CreateNewAuction函数中传递的参数_orderdetail来创建拍卖订单。
         orderdetail = _orderdetail; // 将参数_orderdetail写入全局变量orderdetail，记录订单可视细节。
         address_auctioncall = msg.sender; // 将创建此合约的地址（即CreateNewAuction所在的实例合约）写入全局变量address_auctioncall，作为本合约的中心合约地址。
@@ -47,6 +48,7 @@ contract AuctionInstance {
         //require(AddressFromPublicKey(_publickey) == _owner, "The public key is not the address of the owner.");
         owner_publickey = _publickey; // 将CreateNewAuction的调用者公钥写入全局变量owner_publickey，记录拍卖订单的卖方公钥。
         TrunctionNumber = uint8(orderdetail.Quantity / orderdetail.Minimalsplit);
+        address_centeradmin = _centeradmin;
         currentstate = auction_state.on;
     }
 
@@ -114,6 +116,7 @@ contract AuctionInstance {
     function RetractBidding() external OutsourceImmutability forbidOwner AuctionOn {
         // 修饰符功能如前，买方通过调用该函数对Biddinglist中记录的报价进行撤销。
         // 注意到Biddinglist对任一地址只能同时存在一个报价信息，因此撤回时只需初始化报价时间，后续考察有效报价时通过筛选报价时间的条件即可。
+        require(Biddinglist[msg.sender].Liveness, "Currently you have no biddings recorded on the auction.");
         Biddinglist[msg.sender].Liveness = false;
         Biddinglist[msg.sender].Bidding_Time = type(uint256).max;
     }
@@ -126,7 +129,7 @@ contract AuctionInstance {
         // 4、将取出的线性化密文依次与已排序的线性化密文比较，通过cmux方法依照密文比较结果更新SortedFinalBiddings;
         // 5、SortedFinalBiddings排序完成后，将其各项密文重加密为卖方可解密的密文，并将BiddingAddress的结果返回给卖方供其解密Bidder_index的参考。
         // 计算订单最大分拆数TrunctionNumber。
-        List_Sorting_Test(); // 调用List_Sorting对BiddingAddress进行（依照Bidding_Time）的排序和无效订单的过滤。
+        List_Sorting(); // 调用List_Sorting对BiddingAddress进行（依照Bidding_Time）的排序和无效订单的过滤。
         BiddersNum = BiddersInfoList.length;
         //SortedParsedBiddings = new ExtractedFinal_parsed[](TrunctionNumber);
         if (BiddersNum == 0) {
@@ -255,7 +258,7 @@ contract AuctionInstance {
         return (parsed_cpriceinunit, parsed_cquantity);
     }
 
-    function List_Sorting_Test() private {
+    function List_Sorting() private {
         uint lengthoflist = BiddersInfoList.length;
         uint nullindex = lengthoflist; // 定义nullindex作为标记位来记录排序后最大的对应Bidding_Time为0的地址，方便后续将nullindex之前（包含）的所有买方地址删除。初始化为不在列表中的最小位置。
         for (uint i = 0; i < lengthoflist - 1; i++) {
@@ -298,45 +301,45 @@ contract AuctionInstance {
         }
     }
 
-    function List_Sorting(BidderInfo[] memory biddersinfolist) private view returns (BidderInfo[] memory) {
-        // 定义一个私有函数，用于对BiddingAddress中出现的买方地址进行排序，排序的标准是买方地址在Biddinglist映射中对应的报价时间。
-        // 依据报价时间排序，能够保证以该顺序将BiddingAddress中的买方地址自然地以时间优先顺序替换SortedFinalBiddings中的元素，相当于在线性化比较的外部已经提前实现了明文时间的排序。
-        // List_Sorting在完成排序后会将所有撤回订单的买方地址（对应Bidding_Time为0的地址）删除，剩下的买方地址都对应了有效报价，这些有效报价将进一步进行线性化密文报价信息的排序。
-        uint lengthoflist = biddersinfolist.length;
-        uint nullindex = lengthoflist; // 定义nullindex作为标记位来记录排序后最大的对应Bidding_Time为0的地址，方便后续将nullindex之前（包含）的所有买方地址删除。初始化为不在列表中的最小位置。
-        for (uint i = 0; i < lengthoflist - 1; i++) {
-            // 关于明文报价时间的属性进行选择排序。
-            uint flagindex = i; // 定义flagindex作为选择排序的临时标记位，用于记录未排序元素中对应Bidding_Time最小的地址位置。
-            for (uint j = i + 1; j < lengthoflist - 2; j++) {
-                // 未排序的元素从第j + 1个位置开始。
-                if (
-                    Biddinglist[biddersinfolist[j].Bidder_Address].Bidding_Time <
-                    Biddinglist[biddersinfolist[flagindex].Bidder_Address].Bidding_Time
-                ) {
-                    flagindex = j; // 更新当前已检查到的未排序元素中对应Bidding_Time最小的地址位置。
-                }
-            }
-            if (flagindex != i) {
-                // 只有flagindex与i位置不同时（即存在比第i个位置对应的Bidding_Time小的未排序元素）才进行交换。
-                (biddersinfolist[i], biddersinfolist[flagindex]) = (biddersinfolist[flagindex], biddersinfolist[i]);
-            }
-            if (Biddinglist[biddersinfolist[i].Bidder_Address].Bidding_Time == 0) {
-                // 交换后，检查被交换的对应Bidding_Time最小项是否为0，若为0，则更新nullindex；这表明到目前为止nullindex之前（包含）的所有买方地址都对应无效报价。
-                nullindex = i;
-            }
-        }
-        if (nullindex != lengthoflist) {
-            // nullindex != lengthoflist，表明至少存在一个买方地址对应无效报价。
-            BidderInfo[] memory supportbiddersinfolist = new BidderInfo[](lengthoflist - nullindex - 1);
-            for (uint k = 0; k < lengthoflist - nullindex - 1; k++) {
-                supportbiddersinfolist[k] = biddersinfolist[k + nullindex + 1];
-            }
-            return supportbiddersinfolist;
-        } else {
-            // nullindex == lengthoflist，表明所有买方地址都对应有效报价，此时直接返回已排序的BiddingAddress。
-            return biddersinfolist;
-        }
-    }
+    // function List_Sorting(BidderInfo[] memory biddersinfolist) private view returns (BidderInfo[] memory) {
+    //     // 定义一个私有函数，用于对BiddingAddress中出现的买方地址进行排序，排序的标准是买方地址在Biddinglist映射中对应的报价时间。
+    //     // 依据报价时间排序，能够保证以该顺序将BiddingAddress中的买方地址自然地以时间优先顺序替换SortedFinalBiddings中的元素，相当于在线性化比较的外部已经提前实现了明文时间的排序。
+    //     // List_Sorting在完成排序后会将所有撤回订单的买方地址（对应Bidding_Time为0的地址）删除，剩下的买方地址都对应了有效报价，这些有效报价将进一步进行线性化密文报价信息的排序。
+    //     uint lengthoflist = biddersinfolist.length;
+    //     uint nullindex = lengthoflist; // 定义nullindex作为标记位来记录排序后最大的对应Bidding_Time为0的地址，方便后续将nullindex之前（包含）的所有买方地址删除。初始化为不在列表中的最小位置。
+    //     for (uint i = 0; i < lengthoflist - 1; i++) {
+    //         // 关于明文报价时间的属性进行选择排序。
+    //         uint flagindex = i; // 定义flagindex作为选择排序的临时标记位，用于记录未排序元素中对应Bidding_Time最小的地址位置。
+    //         for (uint j = i + 1; j < lengthoflist - 2; j++) {
+    //             // 未排序的元素从第j + 1个位置开始。
+    //             if (
+    //                 Biddinglist[biddersinfolist[j].Bidder_Address].Bidding_Time <
+    //                 Biddinglist[biddersinfolist[flagindex].Bidder_Address].Bidding_Time
+    //             ) {
+    //                 flagindex = j; // 更新当前已检查到的未排序元素中对应Bidding_Time最小的地址位置。
+    //             }
+    //         }
+    //         if (flagindex != i) {
+    //             // 只有flagindex与i位置不同时（即存在比第i个位置对应的Bidding_Time小的未排序元素）才进行交换。
+    //             (biddersinfolist[i], biddersinfolist[flagindex]) = (biddersinfolist[flagindex], biddersinfolist[i]);
+    //         }
+    //         if (Biddinglist[biddersinfolist[i].Bidder_Address].Bidding_Time == 0) {
+    //             // 交换后，检查被交换的对应Bidding_Time最小项是否为0，若为0，则更新nullindex；这表明到目前为止nullindex之前（包含）的所有买方地址都对应无效报价。
+    //             nullindex = i;
+    //         }
+    //     }
+    //     if (nullindex != lengthoflist) {
+    //         // nullindex != lengthoflist，表明至少存在一个买方地址对应无效报价。
+    //         BidderInfo[] memory supportbiddersinfolist = new BidderInfo[](lengthoflist - nullindex - 1);
+    //         for (uint k = 0; k < lengthoflist - nullindex - 1; k++) {
+    //             supportbiddersinfolist[k] = biddersinfolist[k + nullindex + 1];
+    //         }
+    //         return supportbiddersinfolist;
+    //     } else {
+    //         // nullindex == lengthoflist，表明所有买方地址都对应有效报价，此时直接返回已排序的BiddingAddress。
+    //         return biddersinfolist;
+    //     }
+    // }
 
     function winnersnumber() private view returns (euint8) {
         euint8 thenumber = TFHE.asEuint8(0);
@@ -409,7 +412,10 @@ contract AuctionInstance {
 
     modifier forbidOwner() {
         // 防止卖方本人直接或间接调用的修饰符，主要用于避免卖方对报价环节的干涉。
-        require(tx.origin != owner, "The creator himself should not interfere in the procedure of bidding.");
+        require(
+            tx.origin != owner && tx.origin != address_centeradmin,
+            "The creator himself and the transaction center should not interfere in the procedure of bidding."
+        );
         _;
     }
 
