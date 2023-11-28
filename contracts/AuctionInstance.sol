@@ -3,6 +3,7 @@ pragma solidity >=0.8.0 <0.9.0;
 
 //import "./AuctionCall.sol";
 import "fhevm/lib/TFHE.sol";
+import "hardhat/console.sol";
 
 // TODO:调整顺序 把public放前面。
 // TODO:用cmux算出具体的成交人数，然后按照成交人数依次门限解密Cindex，然后用每个Cindex对应的pk和卖方进行重加密，注意：在Bidding_Address中添加pk一行。
@@ -114,10 +115,10 @@ contract AuctionInstance {
     }
 
     function RetractBidding() external OutsourceImmutability forbidOwner AuctionOn {
+        //FIXME:require改一下
         // 修饰符功能如前，买方通过调用该函数对Biddinglist中记录的报价进行撤销。
         // 注意到Biddinglist对任一地址只能同时存在一个报价信息，因此撤回时只需初始化报价时间，后续考察有效报价时通过筛选报价时间的条件即可。
         require(Biddinglist[msg.sender].Liveness, "Currently you have no biddings recorded on the auction.");
-        Biddinglist[msg.sender].Liveness = false;
         Biddinglist[msg.sender].Bidding_Time = type(uint256).max;
     }
 
@@ -160,7 +161,7 @@ contract AuctionInstance {
             for (uint t = 0; t < TrunctionNumber; t++) {
                 // 根据SortConditions中的密文比较结果更新SortedFinalBiddings。
                 ExtractedFinal_linearized memory currentprocessing = SortedLinearizedBiddings[t]; // 取出SortedFinalBiddings中的当前密文，
-                SortedLinearizedBiddings[TrunctionNumber - t - 1] = ExtractedFinal_linearized(
+                SortedLinearizedBiddings[t] = ExtractedFinal_linearized(
                     TFHE.cmux( // 通过cmux方法判断同下条件，但此时是为了将Bidder_Cindex按照线性化密文的比较结果跟踪过去。
                         TFHE.and(SortConditions[t], TFHE.not(SortConditions[t + 1])),
                         TFHE.asEuint8(j),
@@ -185,11 +186,15 @@ contract AuctionInstance {
         }
         // 初始化ExtractedFinal数组SortedFinalBiddings：
         for (uint l = 0; l < TrunctionNumber; l++) {
-            (euint32 parsed_cpriceinunit, euint32 parsed_cquantity) = ParseConponents(
-                SortedLinearizedBiddings[l].Linearized_Ciphertext
+            (euint32 parsed_cpriceinunit, euint32 parsed_cquantity) = ParseComponents(
+                SortedLinearizedBiddings[TrunctionNumber - l - 1].Linearized_Ciphertext
             );
             SortedParsedBiddings.push(
-                ExtractedFinal_parsed(SortedLinearizedBiddings[l].Bidder_Cindex, parsed_cpriceinunit, parsed_cquantity)
+                ExtractedFinal_parsed(
+                    SortedLinearizedBiddings[TrunctionNumber - l - 1].Bidder_Cindex,
+                    parsed_cpriceinunit,
+                    parsed_cquantity
+                )
             );
         }
         WinnersNum = TFHE.decrypt(winnersnumber());
@@ -252,7 +257,7 @@ contract AuctionInstance {
         return TFHE.add(conpensatedprice, bidding.Quantity);
     }
 
-    function ParseConponents(euint32 _linearizedbidding) private view returns (euint32, euint32) {
+    function ParseComponents(euint32 _linearizedbidding) private view returns (euint32, euint32) {
         euint32 parsed_cquantity = TFHE.rem(_linearizedbidding, 2 ^ quantitylogrange);
         euint32 parsed_cpriceinunit = TFHE.div(TFHE.sub(_linearizedbidding, parsed_cquantity), 2 ^ quantitylogrange);
         return (parsed_cpriceinunit, parsed_cquantity);
@@ -260,11 +265,15 @@ contract AuctionInstance {
 
     function List_Sorting() private {
         uint lengthoflist = BiddersInfoList.length;
+        if (lengthoflist == 0 || lengthoflist == 1) {
+            return;
+        }
         uint nullindex = lengthoflist; // 定义nullindex作为标记位来记录排序后最大的对应Bidding_Time为0的地址，方便后续将nullindex之前（包含）的所有买方地址删除。初始化为不在列表中的最小位置。
+        uint poptimes = 0;
         for (uint i = 0; i < lengthoflist - 1; i++) {
             // 关于明文报价时间的属性进行选择排序。
             uint flagindex = i;
-            uint exchangedtime; // 定义flagindex作为选择排序的临时标记位，用于记录未排序元素中对应Bidding_Time最小的地址位置。
+            uint exchangedtime = Biddinglist[BiddersInfoList[flagindex].Bidder_Address].Bidding_Time; // 定义flagindex作为选择排序的临时标记位，用于记录未排序元素中对应Bidding_Time最小的地址位置。
             for (uint j = i + 1; j < lengthoflist - 1; j++) {
                 // 未排序的元素从第j + 1个位置开始。
                 if (
@@ -287,18 +296,24 @@ contract AuctionInstance {
                 nullindex = i;
             }
         }
-        if (nullindex != lengthoflist - 1) {
-            // nullindex != lengthoflist，表明至少存在一个买方地址对应无效报价。
-            uint poptimes = lengthoflist - nullindex - 1;
-            while (poptimes > 0) {
+        if (Biddinglist[BiddersInfoList[0].Bidder_Address].Bidding_Time == type(uint256).max) {
+            poptimes = lengthoflist;
+            while (poptimes != 0) {
                 BiddersInfoList.pop();
                 poptimes--;
             }
-            //for (uint k = 0; k < lengthoflist - nullindex - 1; k++) {
-            //    BidderInfo memory tmp3 = BiddersInfoList[k + nullindex + 1];
-            //    BiddersInfoList[k] = tmp3;
-            //}
+            return;
         }
+
+        poptimes = lengthoflist - nullindex - 1;
+        while (poptimes != 0) {
+            BiddersInfoList.pop();
+            poptimes--;
+        }
+        //for (uint k = 0; k < lengthoflist - nullindex - 1; k++) {
+        //    BidderInfo memory tmp3 = BiddersInfoList[k + nullindex + 1];
+        //    BiddersInfoList[k] = tmp3;
+        //}
     }
 
     // function List_Sorting(BidderInfo[] memory biddersinfolist) private view returns (BidderInfo[] memory) {
@@ -347,7 +362,7 @@ contract AuctionInstance {
         euint32 cquantity = TFHE.asEuint32(orderdetail.Quantity);
         for (uint i = 0; i < TrunctionNumber; i++) {
             accumulatedquantity = TFHE.add(accumulatedquantity, SortedParsedBiddings[i].Parsed_Cquantity);
-            ebool flag = TFHE.gt(accumulatedquantity, cquantity);
+            ebool flag = TFHE.gt(cquantity, accumulatedquantity);
             thenumber = TFHE.cmux(flag, TFHE.add(thenumber, TFHE.asEuint8(1)), thenumber);
         }
         return thenumber;
