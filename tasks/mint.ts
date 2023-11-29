@@ -7,7 +7,7 @@ import { FhevmInstances } from "../test/types";
 
 task("task:mint")
   .addParam("mint", "Tokens to mint")
-  .addParam("account", "Specify which account [alice, bob, carol, dave]")
+  .addParam("account", "Specify which account [alice, bob, carol, dave, eve, fraud, grace, hausdorff, israel, jewish]")
   .setAction(async function (taskArguments: TaskArguments, hre) {
     const { ethers, deployments } = hre;
     const EncryptedERC20 = await deployments.get("EncryptedERC20");

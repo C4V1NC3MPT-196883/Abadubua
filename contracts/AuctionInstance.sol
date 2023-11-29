@@ -22,13 +22,14 @@ contract AuctionInstance {
     auction_state public currentstate;
     uint8 TrunctionNumber;
     uint8 WinnersNum;
-    uint8 quantitylogrange = 16;
-    uint public BiddersNum;
+    uint8 public BiddersNum;
+    uint32 quantityrange = 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2 * 2;
     bytes32 owner_publickey;
     mapping(address => Bidding) Biddinglist; // 定义Biddinglist用于报价环节中买方报价状态的更新。
     OrderDetail public orderdetail; // 全局变量orderdetail：用于存储买方可见的订单细节。
     BidderInfo[] BiddersInfoList; // 定义BiddingAddress用于存储与拍卖订单交互的买方地址，与Biddinglist配合便于锁价后对所有待排序订单的预处理。
     ExtractedFinal_parsed[] SortedParsedBiddings;
+    ExtractedFinal_linearized[] SortedLinearizedBiddings;
 
     event RetractEvent(string retractmsg);
     event ClosedEvent(string closedmsg);
@@ -44,6 +45,11 @@ contract AuctionInstance {
         //require(AddressFromPublicKey(_publickey) == _owner, "The public key is not the address of the owner.");
         owner_publickey = _publickey; // 将CreateNewAuction的调用者公钥写入全局变量owner_publickey，记录拍卖订单的卖方公钥。
         TrunctionNumber = uint8(orderdetail.Quantity / orderdetail.Minimalsplit);
+        address_centeradmin = _centeradmin;
+        currentstate = auction_state.on;
+        for (uint8 i = 0; i < TrunctionNumber; i++) {
+            SortedLinearizedBiddings[i] = ExtractedFinal_linearized(TFHE.asEuint8(0), TFHE.asEuint32(0));
+        }
     }
 
     function RetractMyAuction() public onlyOwner_self {
@@ -72,7 +78,43 @@ contract AuctionInstance {
         return currentstate;
     }
 
-    function RaiseBidding(
+    // function RaiseBidding(
+    //     // 买方调用的核心函数，用于发起报价。RaiseBidding接受序列化的密文bytes作为参数，包括单位报价和认领数量。
+    //     // 函数具有四个修饰符，分别表征函数需要在拍卖未截止、不经过外包调用、非卖方本人调用以及拍卖未撤回的前提下才能被调用。
+    //     bytes memory _priceinunit,
+    //     bytes memory _quantity,
+    //     bytes32 _publickey
+    // ) external forbidOwner OutsourceImmutability AuctionOn {
+    //     euint32 epriceinunit = TFHE.asEuint32(_priceinunit); // 将单位报价的密文bytes转化为euint32类型的密文。
+    //     euint32 equantity = TFHE.asEuint32(_quantity); // 将认领数量的密文bytes转化为euint32类型的密文。
+    //     euint32 ereservepriceinunit = TFHE.asEuint32(orderdetail.Reserve_PriceInUnit); // 将拍卖订单中单位底价的明文转化为euint32类型的密文。
+    //     euint32 equantityintotal = TFHE.asEuint32(orderdetail.Quantity); // 将拍卖订单中总数量的明文转化为euint32类型的密文。
+    //     euint32 eminimalsplit = TFHE.asEuint32(orderdetail.Minimalsplit); // 将拍卖订单中最小认领数量的明文转化为euint32类型的密文。
+    //     ebool condition4price = TFHE.ge(epriceinunit, ereservepriceinunit); // 构造密文条件，判断单位报价是否大于等于拍卖订单中单位底价。
+    //     ebool condition4enoughquantity = TFHE.le(equantity, equantityintotal); // 构造密文条件，判断认领数量是否小于等于拍卖订单中总数量。
+    //     ebool condition4splitquantity = TFHE.le(eminimalsplit, equantity); // 构造密文条件，判断认领数量是否大于等于拍卖订单中最小认领数量。
+    //     ebool condition4quantity = TFHE.and(condition4enoughquantity, condition4splitquantity);
+    //     // 结合以上两条构造密文条件，判断买方认领数量是否满足拍卖订单要求；注意到创建订单阶段已在./AuctionCall.sol中约束了订单最小认领数量与总数量的关系。
+    //     require( // 判断买方单位报价是否满足拍卖订单要求。
+    //         TFHE.decrypt(condition4price),
+    //         "The price for the current bidding is invalid, your state of bidding remains unchanged."
+    //     );
+    //     //FIXME:少帮交易中心省事儿；
+    //     require( // 判断买方认领数量是否满足拍卖订单要求。
+    //         TFHE.decrypt(condition4quantity),
+    //         "The quantity for the current bidding is invalid, your state of bidding remains unchanged."
+    //     );
+    //     if (!Biddinglist[msg.sender].Liveness) {
+    //         // 判断买方是否是第一次报价，如果是则将买方地址添加至BiddingAddress中记录下来。
+    //         BiddersInfoList.push(BidderInfo(msg.sender, _publickey));
+    //     }
+    //     Biddinglist[msg.sender] = Bidding(epriceinunit, equantity, block.timestamp, true);
+    //     emit BidEvent("Someone bidded on the auction.");
+    //     // 将上述转化后的满足报价条件的买方报价信息存储至Biddinglist中，如果买方此前已有报价，则可以通过此方法覆盖，
+    //     // Biddinglist中只会记录一个关于该买方的报价信息。
+    // }
+
+    function RaiseBidding_Test(
         // 买方调用的核心函数，用于发起报价。RaiseBidding接受序列化的密文bytes作为参数，包括单位报价和认领数量。
         // 函数具有四个修饰符，分别表征函数需要在拍卖未截止、不经过外包调用、非卖方本人调用以及拍卖未撤回的前提下才能被调用。
         bytes memory _priceinunit,
@@ -97,11 +139,11 @@ contract AuctionInstance {
             TFHE.decrypt(condition4quantity),
             "The quantity for the current bidding is invalid, your state of bidding remains unchanged."
         );
-        if (!Biddinglist[msg.sender].Liveness) {
-            // 判断买方是否是第一次报价，如果是则将买方地址添加至BiddingAddress中记录下来。
-            BiddersInfoList.push(BidderInfo(msg.sender, _publickey));
-        }
-        Biddinglist[msg.sender] = Bidding(epriceinunit, equantity, block.timestamp, true);
+        //Biddinglist[msg.sender] = Bidding(epriceinunit, equantity, block.timestamp);
+        euint32 linearizedcipher = TFHE.add(TFHE.mul(epriceinunit, quantityrange), equantity);
+        BiddersInfoList.push(BidderInfo(msg.sender, _publickey));
+        InsertBidding(TFHE.asEuint8(BiddersNum), linearizedcipher);
+        BiddersNum++;
         emit BidEvent("Someone bidded on the auction.");
         // 将上述转化后的满足报价条件的买方报价信息存储至Biddinglist中，如果买方此前已有报价，则可以通过此方法覆盖，
         // Biddinglist中只会记录一个关于该买方的报价信息。
@@ -122,8 +164,8 @@ contract AuctionInstance {
         // 4、将取出的线性化密文依次与已排序的线性化密文比较，通过cmux方法依照密文比较结果更新SortedFinalBiddings;
         // 5、SortedFinalBiddings排序完成后，将其各项密文重加密为卖方可解密的密文，并将BiddingAddress的结果返回给卖方供其解密Bidder_index的参考。
         // 计算订单最大分拆数TrunctionNumber。
-        List_Sorting_Test(); // 调用List_Sorting对BiddingAddress进行（依照Bidding_Time）的排序和无效订单的过滤。
-        BiddersNum = BiddersInfoList.length;
+        List_Sorting(); // 调用List_Sorting对BiddingAddress进行（依照Bidding_Time）的排序和无效订单的过滤。
+        BiddersNum = uint8(BiddersInfoList.length);
         //SortedParsedBiddings = new ExtractedFinal_parsed[](TrunctionNumber);
         if (BiddersNum == 0) {
             (bool has_terminated, ) = address_auctioncall.call(abi.encodeWithSignature("TerminateAuction()"));
@@ -141,7 +183,7 @@ contract AuctionInstance {
             // 依次取出BiddingAddress中的买方地址进行线性化密文的比较。
             Bidding memory currentbidding = Biddinglist[BiddersInfoList[j].Bidder_Address]; // 读取买方地址对应的拍卖订单信息，注意到买方地址一定对应Biddinglist中的有效报价。
             euint32 currentlinearizedbidding = CipherLinearization(currentbidding); // 通过当前读取的拍卖订单信息计算线性化密文。
-            ebool[] memory SortConditions = new ebool[](TrunctionNumber + 1); // 初始化一个临时密文条件数组，记录密文比较结果，最后一个元素为false（即线性化密文一定不会和最后一个元素交换）。
+            ebool[] memory SortConditions = new ebool[](TrunctionNumber); // 初始化一个临时密文条件数组，记录密文比较结果，最后一个元素为false（即线性化密文一定不会和最后一个元素交换）。
             for (uint k = 0; k < TrunctionNumber; k++) {
                 // 依次将取出的线性化密文依次与已排序的线性化密文比较，通过cmux方法依照密文比较结果更新SortedFinalBiddings。
                 SortConditions[k] = TFHE.gt(
@@ -149,22 +191,45 @@ contract AuctionInstance {
                     SortedLinearizedBiddings[k].Linearized_Ciphertext
                 );
             }
-            SortConditions[TrunctionNumber] = TFHE.asEbool(false); // 最后一个元素为false（即线性化密文一定不会和最后一个元素交换）。
+            //SortConditions[TrunctionNumber] = TFHE.asEbool(false); // 最后一个元素为false（即线性化密文一定不会和最后一个元素交换）。
             for (uint t = 0; t < TrunctionNumber; t++) {
                 // 根据SortConditions中的密文比较结果更新SortedFinalBiddings。
-                ExtractedFinal_linearized memory currentprocessing = SortedLinearizedBiddings[t]; // 取出SortedFinalBiddings中的当前密文，
-                SortedLinearizedBiddings[TrunctionNumber - t - 1] = ExtractedFinal_linearized(
-                    TFHE.cmux( // 通过cmux方法判断同下条件，但此时是为了将Bidder_Cindex按照线性化密文的比较结果跟踪过去。
-                        TFHE.and(SortConditions[t], TFHE.not(SortConditions[t + 1])),
-                        TFHE.asEuint8(j),
-                        currentprocessing.Bidder_Cindex
-                    ),
-                    TFHE.cmux( // 通过cmux方法依照密文比较结果更新SortedFinalBiddings，如果当前线性化密文可以替换第t项而不能替换第t+1项，则替换第t项；否则cmux只会引起对应位置的重加密。
-                        TFHE.and(SortConditions[t], TFHE.not(SortConditions[t + 1])),
-                        currentlinearizedbidding,
-                        currentprocessing.Linearized_Ciphertext
-                    )
-                );
+                if (t == 0) {
+                    SortedLinearizedBiddings[0] = ExtractedFinal_linearized(
+                        TFHE.cmux(SortConditions[0], TFHE.asEuint8(j), SortedLinearizedBiddings[0].Bidder_Cindex),
+                        TFHE.cmux(
+                            SortConditions[0],
+                            currentlinearizedbidding,
+                            SortedLinearizedBiddings[0].Linearized_Ciphertext
+                        )
+                    );
+                } else {
+                    ExtractedFinal_linearized memory tmp = ExtractedFinal_linearized(
+                        TFHE.cmux(
+                            SortConditions[t],
+                            SortedLinearizedBiddings[t].Bidder_Cindex,
+                            SortedLinearizedBiddings[t - 1].Bidder_Cindex
+                        ),
+                        TFHE.cmux(
+                            SortConditions[t],
+                            SortedLinearizedBiddings[t].Linearized_Ciphertext,
+                            SortedLinearizedBiddings[t - 1].Linearized_Ciphertext
+                        )
+                    );
+                    SortedLinearizedBiddings[t] = ExtractedFinal_linearized(
+                        TFHE.cmux(
+                            SortConditions[t],
+                            SortedLinearizedBiddings[t - 1].Bidder_Cindex,
+                            SortedLinearizedBiddings[t].Bidder_Cindex
+                        ),
+                        TFHE.cmux(
+                            SortConditions[t],
+                            SortedLinearizedBiddings[t - 1].Linearized_Ciphertext,
+                            SortedLinearizedBiddings[t].Linearized_Ciphertext
+                        )
+                    );
+                    SortedLinearizedBiddings[t - 1] = tmp;
+                }
             }
             // 比较更新原理：
             // 1、首先通过已排序的BiddingAddress中取出时间优先级最高的报价，将其整合为线性化密文；
@@ -245,7 +310,7 @@ contract AuctionInstance {
 
     function CipherLinearization(Bidding memory bidding) private view returns (euint32) {
         // 定义一个私有函数，用于将报价信息中的多属性密文转化为线性化后的密文，将优先级较高的属性放置到高位时需要对低位属性的长度进行扩展补偿，此处设置低位的数量属性补偿为16位。
-        euint32 conpensatedprice = TFHE.mul(bidding.PriceInUnit, TFHE.asEuint32(2 ^ quantitylogrange)); // 将买方单位报价平移16位至高位。
+        euint32 conpensatedprice = TFHE.mul(bidding.PriceInUnit, TFHE.asEuint32(quantityrange)); // 将买方单位报价平移16位至高位。
         return TFHE.add(conpensatedprice, bidding.Quantity);
     }
 
@@ -258,11 +323,12 @@ contract AuctionInstance {
     function List_Sorting_Test() private {
         uint lengthoflist = BiddersInfoList.length;
         uint nullindex = lengthoflist; // 定义nullindex作为标记位来记录排序后最大的对应Bidding_Time为0的地址，方便后续将nullindex之前（包含）的所有买方地址删除。初始化为不在列表中的最小位置。
-        for (uint i = 0; i < lengthoflist - 1; i++) {
+        uint poptimes = 0;
+        for (uint i = 0; i < lengthoflist; i++) {
             // 关于明文报价时间的属性进行选择排序。
             uint flagindex = i;
-            uint exchangedtime; // 定义flagindex作为选择排序的临时标记位，用于记录未排序元素中对应Bidding_Time最小的地址位置。
-            for (uint j = i + 1; j < lengthoflist - 1; j++) {
+            uint exchangedtime = Biddinglist[BiddersInfoList[flagindex].Bidder_Address].Bidding_Time; // 定义flagindex作为选择排序的临时标记位，用于记录未排序元素中对应Bidding_Time最小的地址位置。
+            for (uint j = i + 1; j < lengthoflist; j++) {
                 // 未排序的元素从第j + 1个位置开始。
                 if (
                     Biddinglist[BiddersInfoList[j].Bidder_Address].Bidding_Time <
@@ -344,7 +410,7 @@ contract AuctionInstance {
         euint32 cquantity = TFHE.asEuint32(orderdetail.Quantity);
         for (uint i = 0; i < TrunctionNumber; i++) {
             accumulatedquantity = TFHE.add(accumulatedquantity, SortedParsedBiddings[i].Parsed_Cquantity);
-            ebool flag = TFHE.gt(accumulatedquantity, cquantity);
+            ebool flag = TFHE.ge(cquantity, accumulatedquantity);
             thenumber = TFHE.cmux(flag, TFHE.add(thenumber, TFHE.asEuint8(1)), thenumber);
         }
         return thenumber;
@@ -374,7 +440,7 @@ contract AuctionInstance {
         euint32 PriceInUnit; // PriceInUnit：单位报价。
         euint32 Quantity; // Quantity：认领/分拆数量。
         uint256 Bidding_Time; // Bidding_Time：报价时间。
-        bool Liveness; // Liveness：记录买方在此拍卖订单中是否有过报价记录，此布尔值主要为便于锁价而设置。
+        //bool Liveness; // Liveness：记录买方在此拍卖订单中是否有过报价记录，此布尔值主要为便于锁价而设置。
     }
 
     struct ExtractedFinal_linearized {
