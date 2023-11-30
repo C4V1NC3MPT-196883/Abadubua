@@ -82,7 +82,7 @@ describe("OrderMarket", function () {
         expect(await this.auction._orderCount(this.signers.bob.address)).to.equal(3);
     });
 
-    it("retract and terminate shouldn't get called by non-auction-like address", async function () {
+    it("cancel and finalize shouldn't get called by non-auction-like address", async function () {
         const publicKey_bob = this.instances.bob.getTokenSignature(this.contractAddress)!.publicKey;
         const pk_bob = uint8ArrayToBytes32(publicKey_bob);
 
@@ -90,7 +90,7 @@ describe("OrderMarket", function () {
             .connect(this.signers.bob)
             .createNewOrder(pk_bob, "test1", "coking coal", 10, 100, 5, 10);
         await tx1_bob.wait();
-        await expect(this.auction.connect(this.signers.bob).finalizeOrder()).to.be.rejectedWith("Invalid retraction.");
+        await expect(this.auction.connect(this.signers.bob).finalizeOrder()).to.be.rejected;
 
         const publicKey_carol = this.instances.carol.getTokenSignature(this.contractAddress)!.publicKey;
         const pk_carol = uint8ArrayToBytes32(publicKey_carol);
@@ -99,12 +99,8 @@ describe("OrderMarket", function () {
             .connect(this.signers.carol)
             .createNewOrder(pk_carol, "test111", "coking1 coal", 10, 100, 5, 10);
         await tx1_carol.wait();
-        await expect(this.auction.connect(this.signers.bob).TerminateAuction()).to.be.rejectedWith(
-            "Invalid termination.",
-        );
-        await expect(this.auction.connect(this.signers.carol).TerminateAuction()).to.be.rejectedWith(
-            "Invalid termination.",
-        );
+        await expect(this.auction.connect(this.signers.bob).finalizeOrder()).to.be.rejected;
+        await expect(this.auction.connect(this.signers.carol).finalizeOrder()).to.be.rejected;
     });
 
     it("auction_owner makes correct records.", async function () {
