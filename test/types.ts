@@ -21,4 +21,6 @@ export interface FhevmInstances {
     fraud: FhevmInstance;
     grace: FhevmInstance;
     hausdorff: FhevmInstance;
+    israel: FhevmInstance;
+    jewish: FhevmInstance;
 }

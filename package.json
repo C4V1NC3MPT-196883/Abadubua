@@ -83,7 +83,7 @@
         "fhevm:start": "docker run -i -p 8545:8545 --rm --name fhevm ghcr.io/zama-ai/evmos-dev-node:v0.1.10",
         "fhevm:stop": "docker rm -f fhevm",
         "fhevm:restart": "fhevm:stop && fhevm:start",
-        "fhevm:faucet": "npm run fhevm:faucet:alice && sleep 5 && npm run fhevm:faucet:bob && sleep 5 && npm run fhevm:faucet:carol && sleep 5 && npm run fhevm:faucet:dave",
+        "fhevm:faucet": "npm run fhevm:faucet:alice && sleep 5 && npm run fhevm:faucet:bob && sleep 5 && npm run fhevm:faucet:carol && sleep 5 && npm run fhevm:faucet:dave && sleep 5 && npm run fhevm:faucet:eve && sleep 5 && npm run fhevm:faucet:fraud && sleep 5 && npm run fhevm:faucet:grace && sleep 5 && npm run fhevm:faucet:hausdorff && sleep 5 && npm run fhevm:faucet:israel && sleep 5 && npm run fhevm:faucet:jewish",
         "fhevm:faucet:alice": "docker exec -i fhevm faucet $(npx hardhat task:getEthereumAddressAlice)",
         "fhevm:faucet:bob": "docker exec -i fhevm faucet $(npx hardhat task:getEthereumAddressBob)",
         "fhevm:faucet:carol": "docker exec -i fhevm faucet $(npx hardhat task:getEthereumAddressCarol)",
@@ -92,7 +92,10 @@
         "fhevm:faucet:fraud": "docker exec -i fhevm faucet $(npx hardhat task:getEthereumAddressFraud)",
         "fhevm:faucet:grace": "docker exec -i fhevm faucet $(npx hardhat task:getEthereumAddressGrace)",
         "fhevm:faucet:hausdorff": "docker exec -i fhevm faucet $(npx hardhat task:getEthereumAddressHausdorff)",
-        "fhevm:faucet:once4all": "pnpm fhevm:faucet:alice && pnpm fhevm:faucet:bob && pnpm fhevm:faucet:carol && pnpm fhevm:faucet:dave && pnpm fhevm:faucet:eve && pnpm fhevm:faucet:fraud && pnpm fhevm:faucet:grace && pnpm fhevm:faucet:hausdorff"
+        "fhevm:faucet:israel": "docker exec -i fhevm faucet $(npx hardhat task:getEthereumAddressIsrael)",
+        "fhevm:faucet:jewish": "docker exec -i fhevm faucet $(npx hardhat task:getEthereumAddressJewish)",
+        "fhevm:faucet:once4all": "pnpm fhevm:faucet:alice && pnpm fhevm:faucet:bob && pnpm fhevm:faucet:carol && pnpm fhevm:faucet:dave && pnpm fhevm:faucet:eve && pnpm fhevm:faucet:fraud && pnpm fhevm:faucet:grace && pnpm fhevm:faucet:hausdorff && pnpm fhevm:faucet:israel && pnpm fhevm:faucet:jewish",
+        "fhevm:faucet:rich": "pnpm fhevm:faucet:once4all && pnpm fhevm:faucet:once4all && pnpm fhevm:faucet:once4all && pnpm fhevm:faucet:once4all && pnpm fhevm:faucet:once4all && pnpm fhevm:faucet:once4all && pnpm fhevm:faucet:once4all"
     },
     "dependencies": {
         "@openzeppelin/contracts": "^4.9.2"

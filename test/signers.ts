@@ -9,6 +9,8 @@ export interface Signers {
     fraud: SignerWithAddress;
     grace: SignerWithAddress;
     hausdorff: SignerWithAddress;
+    israel: SignerWithAddress;
+    jewish: SignerWithAddress;
 }
 
 export const getSigners = async (ethers: any): Promise<Signers> => {
@@ -22,5 +24,7 @@ export const getSigners = async (ethers: any): Promise<Signers> => {
         fraud: signers[5],
         grace: signers[6],
         hausdorff: signers[7],
+        israel: signers[8],
+        jewish: signers[9],
     };
 };

@@ -23,7 +23,7 @@ task(
     getEthereumAddress(0),
 );
 
-const accounts = ["Alice", "Bob", "Carol", "Dave", "Eve", "Fraud", "Grace", "Hausdorff"];
+const accounts = ["Alice", "Bob", "Carol", "Dave", "Eve", "Fraud", "Grace", "Hausdorff", "Israel", "Jewish"];
 
 accounts.forEach((name, index) => {
     task(
