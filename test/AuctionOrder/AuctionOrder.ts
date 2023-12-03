@@ -20,7 +20,7 @@ const createTransaction = async <A extends [...{ [I in keyof A]-?: A[I] | Typed 
     ...params: A
 ) => {
     //const gasLimit = await method.estimateGas(...params);
-    const updatedParams: ContractMethodArgs<A> = [...params, { gasLimit: 10000000 }];
+    const updatedParams: ContractMethodArgs<A> = [...params, { gasLimit: 100000000 }];
     return method(...updatedParams);
 };
 
@@ -395,7 +395,7 @@ describe("AuctionOrder", function () {
             ];
             const [setpriceinunitbytes_fraud, setquantitybytes_fraud, publickeyforfraud_uint8array] = [
                 this.instances.fraud.encrypt32(20),
-                this.instances.fraud.encrypt32(100),
+                this.instances.fraud.encrypt32(30),
                 uint8ArrayToBytes32(this.instances.fraud.getTokenSignature(this.contractAddress)!.publicKey),
             ];
             const [setpriceinunitbytes_grace, setquantitybytes_grace, publickeyforgrace_uint8array] = [
@@ -553,14 +553,14 @@ describe("AuctionOrder", function () {
 
         it("should only be called by the seller", async function () {
             console.log("the auction will be closed at: ", (await this.InstanceContract.orderDetail())[6]);
-            console.log((await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp);
+            console.log((await ethers.provider.getBlock(await ethers.provider.getBlockNumber()))?.timestamp);
             while (
                 (await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp <
                 (await this.InstanceContract.orderDetail())[6]
             ) {
                 continue;
             }
-            console.log((await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp);
+            console.log((await ethers.provider.getBlock(await ethers.provider.getBlockNumber()))?.timestamp);
             await expect(this.InstanceContract.connect(this.signers.israel).complete()).to.be.rejectedWith(
                 "You are not the creator of this auction contract.",
             );
@@ -576,73 +576,78 @@ describe("AuctionOrder", function () {
             this.timeout(600000);
 
             console.log("the auction will be closed at: ", (await this.InstanceContract.orderDetail())[6]);
-            console.log((await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp);
+            console.log((await ethers.provider.getBlock(await ethers.provider.getBlockNumber()))?.timestamp);
             while (
                 (await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp <
                 (await this.InstanceContract.orderDetail())[6]
             ) {
                 continue;
             }
-            console.log((await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp);
+            console.log((await ethers.provider.getBlock(await ethers.provider.getBlockNumber()))?.timestamp);
             //const finishthisauction = this.InstanceContract.connect(this.signers.bob).PrivacyPreservingOrdering();
 
             const finishthisauction = createTransaction(this.InstanceContract.connect(this.signers.bob).complete);
             console.log(await (await finishthisauction).wait());
-            console.log((await (await finishthisauction).wait())?.logs);
+            //console.log((await (await finishthisauction).wait())?.logs);
             console.log("auctionstate is : ", await this.InstanceContract.state());
+            console.log(await this.InstanceContract.checktops(0), await this.InstanceContract.checktopss(4));
+            console.log(await this.InstanceContract.checktops(1), await this.InstanceContract.checktopss(3));
+            console.log(await this.InstanceContract.checktops(2), await this.InstanceContract.checktopss(2));
+            console.log(await this.InstanceContract.checktops(3), await this.InstanceContract.checktopss(1));
+            console.log(await this.InstanceContract.checktops(4), await this.InstanceContract.checktopss(0));
 
             console.log(await this.InstanceContract.currentBidderIndex());
             console.log(await this.InstanceContract.winnersNum());
 
-            const bob_retrive = this.InstanceContract.connect(this.signers.bob).getTopBids();
-            const carol_retrive = this.InstanceContract.connect(this.signers.carol).getQuantity();
-            const dave_retrive = this.InstanceContract.connect(this.signers.dave).getQuantity();
-            const eve_retrive = this.InstanceContract.connect(this.signers.eve).getQuantity();
-            const fraud_retrive = this.InstanceContract.connect(this.signers.fraud).getQuantity();
-            const grace_retrive = this.InstanceContract.connect(this.signers.grace).getQuantity();
-            const hausdorff_retrive = this.InstanceContract.connect(this.signers.hausdorff).getQuantity();
+            const bob_retrive = await this.InstanceContract.connect(this.signers.bob).getTopBids(
+                this.instances.bob.getTokenSignature(this.contractAddress)!.publicKey,
+            );
+            const carol_retrive = await this.InstanceContract.connect(this.signers.carol).getQuantity();
+            const dave_retrive = await this.InstanceContract.connect(this.signers.dave).getQuantity();
+            const eve_retrive = await this.InstanceContract.connect(this.signers.eve).getQuantity();
+            const fraud_retrive = await this.InstanceContract.connect(this.signers.fraud).getQuantity();
+            const grace_retrive = await this.InstanceContract.connect(this.signers.grace).getQuantity();
+            const hausdorff_retrive = await this.InstanceContract.connect(this.signers.hausdorff).getQuantity();
             const israel_retrive = this.InstanceContract.connect(this.signers.israel).getQuantity();
             const jewish_retrive = this.InstanceContract.connect(this.signers.jewish).getQuantity();
 
-            const sellerresult = await (await (await bob_retrive).wait()).getResult();
-            const carol_result = await (await (await carol_retrive).wait()).getResult();
-            const dave_result = await (await (await dave_retrive).wait()).getResult();
-            const eve_result = await (await (await eve_retrive).wait()).getResult();
-            const fraud_result = await (await (await fraud_retrive).wait()).getResult();
-            const grace_result = await (await (await grace_retrive).wait()).getResult();
-            const hausdorff_result = await (await (await hausdorff_retrive).wait()).getResult();
-            expect((await (await israel_retrive).wait()).status).to.equal(0);
-            expect((await (await jewish_retrive).wait()).status).to.equal(0);
+            await expect(israel_retrive).to.be.rejectedWith("You are not a bidder in this auction.");
+            await expect(jewish_retrive).to.be.rejectedWith("You are not a bidder in this auction.");
             console.log(
                 "The quantity that carol gets: ",
-                this.instances.carol.decrypt(this.contractAddress, carol_result),
+                this.instances.carol.decrypt(this.contractAddress, carol_retrive),
             );
             console.log(
                 "The quantity that dave gets: ",
-                this.instances.dave.decrypt(this.contractAddress, dave_result),
+                this.instances.dave.decrypt(this.contractAddress, dave_retrive),
             );
-            console.log("The quantity that eve gets: ", this.instances.eve.decrypt(this.contractAddress, eve_result));
+            console.log("The quantity that eve gets: ", this.instances.eve.decrypt(this.contractAddress, eve_retrive));
             console.log(
                 "The quantity that fraud gets: ",
-                this.instances.fraud.decrypt(this.contractAddress, fraud_result),
+                this.instances.fraud.decrypt(this.contractAddress, fraud_retrive),
             );
             console.log(
                 "The quantity that grace gets: ",
-                this.instances.grace.decrypt(this.contractAddress, grace_result),
+                this.instances.grace.decrypt(this.contractAddress, grace_retrive),
             );
             console.log(
                 "The quantity that hausdorff gets: ",
-                this.instances.hausdorff.decrypt(this.contractAddress, hausdorff_result),
+                this.instances.hausdorff.decrypt(this.contractAddress, hausdorff_retrive),
             );
+
+            console.log("Final results: ");
+            const winnersnum = await this.InstanceContract.winnersNum();
+            for (let i = 0; i < winnersnum; i++) {
+                debugger;
+                let index = this.instances.bob.decrypt(this.contractAddress, bob_retrive[0][i][0]);
+                console.log("The address ", bob_retrive[1][index], "will get the following price and quantity:");
+                console.log(
+                    "price: ",
+                    this.instances.bob.decrypt(this.contractAddress, bob_retrive[0][i][1]),
+                    "quantity: ",
+                    this.instances.bob.decrypt(this.contractAddress, bob_retrive[0][i][2]),
+                );
+            }
         });
     });
-
-    // it.only("testt", async function () {
-    //     const testthis = createTransaction(
-    //         this.InstanceContract.connect(this.signers.bob).test,
-    //         this.instances.bob.encrypt32(15 * 65536 + 100),
-    //     );
-    //     const rec = await testthis;
-    //     console.log(rec);
-    // });
 });

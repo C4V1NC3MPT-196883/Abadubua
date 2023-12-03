@@ -81,7 +81,8 @@ contract OrderMarket {
             block.timestamp,
             block.timestamp + _duration
         );
-        AuctionOrder orderContract = new AuctionOrder(orderDetail, _publickey, _owner);
+        AuctionOrder orderContract = new AuctionOrder{ salt: bytes32(uint256(1728)) }(orderDetail, _publickey, _owner);
+        //AuctionOrder orderContract = new AuctionOrder{ salt: bytes32(uint256(1728)) }(orderDetail, _publickey, _owner);
         address orderContractAddress = address(orderContract);
         _orderCount[msg.sender]++;
         _orderOwner[orderContractAddress] = msg.sender;

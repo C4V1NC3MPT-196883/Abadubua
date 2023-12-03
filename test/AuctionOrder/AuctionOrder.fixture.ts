@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { log } from "console";
-import { ContractMethodArgs, Typed } from "ethers";
+import { BigNumberish, BytesLike, ContractMethodArgs, Typed, getBytes } from "ethers";
 import type { FhevmInstance } from "fhevmjs";
 import { ethers } from "hardhat";
 import { Address } from "hardhat-deploy/types";
@@ -27,7 +27,7 @@ export async function getnewcontractfromdeploy(): Promise<Address[]> {
         ...params: A
     ) => {
         //const gasLimit = await method.estimateGas(...params);
-        const updatedParams: ContractMethodArgs<A> = [...params, { gasLimit: 10000000 }];
+        const updatedParams: ContractMethodArgs<A> = [...params, { gasLimit: 100000000 }];
         return method(...updatedParams);
     };
     const signers = await getSigners(ethers);
@@ -38,11 +38,18 @@ export async function getnewcontractfromdeploy(): Promise<Address[]> {
     const addressauctioncall = await contractauctioncall.getAddress();
     const auctioncallinstances = await createInstances(addressauctioncall, ethers, signers);
 
+    // const contractFactory2 = await ethers.getContractFactory("AuctionOrder");
+    // let from = addressauctioncall;
+    // let salt: BytesLike = ethers.encodeBytes32String(ethers.toBeHex(1728));
+    // let initCode = contractFactory2.bytecode;
+    // let initCodeHash = ethers.keccak256(initCode);
+    // const address1 = ethers.getCreate2Address(from, salt, initCodeHash);
+
     const publickeyforbob_uint8array = auctioncallinstances.bob.getTokenSignature(addressauctioncall)!.publicKey;
     const addressbob = await signers.bob.getAddress();
     const pk_bob = uint8ArrayToBytes32(publickeyforbob_uint8array);
 
-    const auctioninfos: any[] = [pk_bob, "jinitaimei", "trashcoal", 10, 100, 100, 60];
+    const auctioninfos: any[] = [pk_bob, "jinitaimei", "trashcoal", 10, 100, 20, 240];
     const tx_bob = await createTransaction(
         contractauctioncall.connect(signers.bob).createNewOrder,
         auctioninfos[0],

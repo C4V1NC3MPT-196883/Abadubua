@@ -73,7 +73,7 @@ contract AuctionOrder {
     OrderDetail public orderDetail; // 全局变量orderDetail：用于存储买方可见的订单细节。
     Bidder[] public bidderList; // 定义BiddingAddress用于存储与拍卖订单交互的买方地址，与Biddinglist配合便于锁价后对所有待排序订单的预处理。
     IndexedBidding[] indexedBiddingList;
-    IndexedBiddingPacked[] public indexedBiddingPackedList;
+    IndexedBiddingPacked[] indexedBiddingPackedList;
 
     event CancelEvent(string cancelMsg);
     event ClosedEvent(string closedMsg);
@@ -138,16 +138,15 @@ contract AuctionOrder {
         }
     }
 
-    modifier hasCompleted() {
-        // 用于检查拍卖订单是否已经截止，如果确实超过了截止时间，则auction_state修改为false，此时本合约不再接受新的订单。
-        refreshState();
-        if (state == OrderState.COMPLETED) {
-            _;
-        } else {
-            emit ErrorCompletedEvent("The auction hasn't been settled yet. Your operations failed.");
-            return;
-        }
-    }
+    // modifier hasCompleted() {
+    //     // 用于检查拍卖订单是否已经截止，如果确实超过了截止时间，则auction_state修改为false，此时本合约不再接受新的订单。
+    //     if (state == OrderState.COMPLETED) {
+    //         _;
+    //     } else {
+    //         emit ErrorCompletedEvent("The auction hasn't been settled yet. Your operations failed.");
+    //         return;
+    //     }
+    // }
 
     modifier onlyEOA() {
         // 用于检查调用者与交易来源是否一致，此方法用于防止外包合约的攻击，在该修饰符下，函数调用必须直接由外部账户来进行，不能够通过合约来间接调用。
@@ -262,7 +261,7 @@ contract AuctionOrder {
             console.log("now have accumulated: ", TFHE.decrypt(accumulatedQuantity));
             ebool flag = TFHE.ge(eQuantity, accumulatedQuantity);
             theNumber = TFHE.cmux(flag, TFHE.add(theNumber, TFHE.asEuint8(1)), theNumber);
-            indexedBiddingList.push(IndexedBidding(indexedBiddingPackedList[l].index, parsedPrice, parsedQuantity));
+            indexedBiddingList.push(IndexedBidding(biddingTmp[l].index, parsedPrice, parsedQuantity));
         }
         winnersNum = TFHE.decrypt(theNumber);
 
@@ -276,23 +275,27 @@ contract AuctionOrder {
         );
     }
 
-    function getTopBids() public onlyOwner hasCompleted returns (IndexedBiddingSerialized[] memory, address[] memory) {
+    function getTopBids(
+        bytes32 publickey
+    ) public view onlyOwner returns (IndexedBiddingSerialized[] memory, address[] memory) {
+        require(state == OrderState.COMPLETED, "The auction results have not been released.");
         IndexedBiddingSerialized[] memory topBidders = new IndexedBiddingSerialized[](winnersNum);
         for (uint i = 0; i < winnersNum; i++) {
             topBidders[i] = IndexedBiddingSerialized(
-                TFHE.reencrypt(indexedBiddingList[i].index, ownerPublickey),
-                TFHE.reencrypt(indexedBiddingList[i].price, ownerPublickey),
-                TFHE.reencrypt(indexedBiddingList[i].quantity, ownerPublickey)
+                TFHE.reencrypt(indexedBiddingList[i].index, publickey),
+                TFHE.reencrypt(indexedBiddingList[i].price, publickey),
+                TFHE.reencrypt(indexedBiddingList[i].quantity, publickey)
             );
         }
-        address[] memory topBidderAddresses = new address[](truncationNum);
-        for (uint j = 0; j < truncationNum; j++) {
+        address[] memory topBidderAddresses = new address[](currentBidderIndex);
+        for (uint j = 0; j < currentBidderIndex; j++) {
             topBidderAddresses[j] = bidderList[j].addr;
         }
         return (topBidders, topBidderAddresses);
     }
 
-    function getQuantity() public hasCompleted returns (bytes memory) {
+    function getQuantity() public view returns (bytes memory) {
+        require(state == OrderState.COMPLETED, "The auction results have not been released.");
         bool existsFlag = false;
         uint myIndex;
         bytes32 myPublickey;
@@ -320,17 +323,19 @@ contract AuctionOrder {
         return (TFHE.decrypt(indexedBiddingPackedList[i].index), TFHE.decrypt(indexedBiddingPackedList[i].bidding));
     }
 
+    function checktopss(uint i) public view returns (uint8, uint32, uint32) {
+        return (
+            TFHE.decrypt(indexedBiddingList[i].index),
+            TFHE.decrypt(indexedBiddingList[i].price),
+            TFHE.decrypt(indexedBiddingList[i].quantity)
+        );
+    }
+
     function unpackBidding(euint32 _linearizedBidding) private view returns (euint32, euint32) {
         euint32 parsedQuantity = TFHE.rem(_linearizedBidding, QUANTITYRANGE);
         euint32 parsedPrice = TFHE.shr(_linearizedBidding, 16);
         return (parsedPrice, parsedQuantity);
     }
-
-    // function test(bytes memory input) public view returns (uint32) {
-    //     euint32 e1 = TFHE.rem(TFHE.asEuint32(input), 5);
-    //     euint32 e2 = TFHE.shr(TFHE.asEuint32(input), 16);
-    //     return (TFHE.decrypt(e2));
-    // }
 
     function insertBidding(euint8 _cindex, euint32 _linearizedcipher) private {
         IndexedBiddingPacked[] memory insertinglist = new IndexedBiddingPacked[](truncationNum);
@@ -360,17 +365,5 @@ contract AuctionOrder {
         for (uint i = 0; i < truncationNum; i++) {
             indexedBiddingPackedList[i] = insertinglist[i];
         }
-    }
-
-    function getWinnersNum() public view returns (euint8) {
-        euint8 theNumber = TFHE.asEuint8(0);
-        euint32 accumulatedQuantity = TFHE.asEuint32(0);
-        euint32 eQuantity = TFHE.asEuint32(orderDetail.quantity);
-        for (uint i = 0; i < truncationNum; i++) {
-            accumulatedQuantity = TFHE.add(accumulatedQuantity, indexedBiddingList[i].quantity);
-            ebool flag = TFHE.ge(eQuantity, accumulatedQuantity);
-            theNumber = TFHE.cmux(flag, TFHE.add(theNumber, TFHE.asEuint8(1)), theNumber);
-        }
-        return theNumber;
     }
 }

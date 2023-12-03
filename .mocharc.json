@@ -1,0 +1,5 @@
+{
+    "require": "hardhat/register",
+    "timeout": 600000,
+    "_": ["test/**/*.ts"]
+}
